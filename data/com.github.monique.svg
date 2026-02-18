@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Main (large) monitor -->
+  <rect x="8" y="16" width="68" height="52" rx="4" ry="4"
+        fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+  <!-- Screen bezel inner -->
+  <rect x="14" y="22" width="56" height="40" rx="1" ry="1"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- Secondary (small) monitor -->
+  <rect x="84" y="24" width="36" height="28" rx="3" ry="3"
+        fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+  <!-- Screen bezel inner -->
+  <rect x="89" y="29" width="26" height="18" rx="1" ry="1"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+
+  <!-- Stands / necks -->
+  <line x1="42" y1="68" x2="42" y2="80"
+        stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <line x1="102" y1="52" x2="102" y2="80"
+        stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Shared base -->
+  <path d="M24 80 L112 80" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <path d="M24 80 Q24 88 32 88 L104 88 Q112 88 112 80"
+        fill="none" stroke="currentColor" stroke-width="4" stroke-linejoin="round"/>
+
+  <!-- Arrangement arrows (symbolic: drag & configure) -->
+  <line x1="34" y1="100" x2="18" y2="100"
+        stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+  <polyline points="22,96 18,100 22,104"
+        fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <line x1="56" y1="100" x2="72" y2="100"
+        stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+  <polyline points="68,96 72,100 68,104"
+        fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Small gear (config accent) -->
+  <circle cx="100" cy="100" r="8"
+          fill="none" stroke="currentColor" stroke-width="3"/>
+  <circle cx="100" cy="100" r="3"
+          fill="none" stroke="currentColor" stroke-width="2"/>
+  <line x1="100" y1="89" x2="100" y2="92" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="100" y1="108" x2="100" y2="111" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="89" y1="100" x2="92" y2="100" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="108" y1="100" x2="111" y2="100" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="92.3" y1="92.3" x2="94.5" y2="94.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="105.5" y1="105.5" x2="107.7" y2="107.7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="107.7" y1="92.3" x2="105.5" y2="94.5" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="94.5" y1="105.5" x2="92.3" y2="107.7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

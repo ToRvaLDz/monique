@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=Monique
+Comment=MONitor Integrated QUick Editor for Hyprland and Sway
+Exec=monique
+Icon=com.github.monique
+Terminal=false
+Type=Application
+Categories=Settings;HardwareSettings;
+Keywords=monitor;display;screen;resolution;hyprland;sway;
