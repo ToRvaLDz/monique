@@ -20,25 +20,28 @@
 
 ## Screenshots
 
-<p align="center">
-  <img src="data/screenshots/1.png" width="720" alt="Monitor layout editor">
-  <br><sub>Drag-and-drop monitor layout with properties panel</sub>
-</p>
-
-<p align="center">
-  <img src="data/screenshots/2.png" width="720" alt="Workspace rules">
-  <br><sub>Workspace rules — assign workspaces to monitors</sub>
-</p>
-
-<p align="center">
-  <img src="data/screenshots/3.png" width="720" alt="Quick setup wizard">
-  <br><sub>Quick setup — distribute workspaces across monitors with one click</sub>
-</p>
-
-<p align="center">
-  <img src="data/screenshots/4.png" width="720" alt="SDDM preferences">
-  <br><sub>SDDM integration — sync layout to the login screen</sub>
-</p>
+<table>
+  <tr>
+    <td align="center">
+      <a href="data/screenshots/1.png"><img src="data/screenshots/1.png" width="400" alt="Monitor layout editor"></a>
+      <br><sub>Layout editor</sub>
+    </td>
+    <td align="center">
+      <a href="data/screenshots/2.png"><img src="data/screenshots/2.png" width="400" alt="Workspace rules"></a>
+      <br><sub>Workspace rules</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="data/screenshots/3.png"><img src="data/screenshots/3.png" width="400" alt="Quick setup wizard"></a>
+      <br><sub>Quick setup</sub>
+    </td>
+    <td align="center">
+      <a href="data/screenshots/4.png"><img src="data/screenshots/4.png" width="400" alt="SDDM preferences"></a>
+      <br><sub>SDDM integration</sub>
+    </td>
+  </tr>
+</table>
 
 ## Features
 
