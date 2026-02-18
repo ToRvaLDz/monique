@@ -82,6 +82,10 @@ class HyprlandIPC:
         """Query active workspaces."""
         return self.command_json("workspaces")
 
+    def move_workspace_to_monitor(self, workspace: str, monitor: str) -> str:
+        """Move a workspace to a different monitor."""
+        return self.command(f"dispatch moveworkspacetomonitor {workspace} {monitor}")
+
     def get_workspace_rules(self, monitors: list[MonitorConfig] | None = None) -> list[WorkspaceRule]:
         """Query workspace rules and return as WorkspaceRule list.
 

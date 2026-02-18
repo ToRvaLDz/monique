@@ -87,13 +87,48 @@ class MonitorDaemon:
 
             profile = self._profile_mgr.find_best_match(fingerprint)
             if profile:
+                # Snapshot workspaces before applying
+                ws_snapshot = ipc.get_workspaces()
+
                 log.info("Applying profile: %s", profile.name)
-                update_sddm = load_app_settings().get("update_sddm", True)
+                settings = load_app_settings()
+                update_sddm = settings.get("update_sddm", True)
                 ipc.apply_profile(profile, update_sddm=update_sddm)
+
+                # Migrate orphaned workspaces
+                if settings.get("migrate_workspaces", True):
+                    self._migrate_orphaned_workspaces(ipc, profile, ws_snapshot)
             else:
                 log.info("No matching profile found")
         except Exception as e:
             log.error("Failed to apply profile: %s", e)
+
+    def _migrate_orphaned_workspaces(
+        self,
+        ipc: HyprlandIPC | SwayIPC,
+        profile,
+        ws_snapshot: list[dict],
+    ) -> None:
+        """Move workspaces from disabled/removed monitors to the primary monitor."""
+        enabled_names = {m.name for m in profile.monitors if m.enabled}
+        if not enabled_names:
+            return
+
+        primary = next(m.name for m in profile.monitors if m.enabled)
+        migrated = 0
+
+        for ws in ws_snapshot:
+            ws_monitor = ws.get("monitor", "")
+            ws_name = str(ws.get("name", ws.get("id", "")))
+            if ws_monitor and ws_monitor not in enabled_names:
+                try:
+                    ipc.move_workspace_to_monitor(ws_name, primary)
+                    migrated += 1
+                except Exception as e:
+                    log.warning("Failed to migrate workspace %s: %s", ws_name, e)
+
+        if migrated:
+            log.info("Migrated %d workspace(s) to %s", migrated, primary)
 
 
 def main() -> None:

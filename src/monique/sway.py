@@ -27,6 +27,7 @@ _HEADER_FMT = f"={len(_MAGIC)}sII"
 
 # Message types
 IPC_COMMAND = 0
+IPC_GET_WORKSPACES = 1
 IPC_SUBSCRIBE = 2
 IPC_GET_OUTPUTS = 3
 
@@ -85,6 +86,14 @@ class SwayIPC:
         """Query all connected monitors as MonitorConfig list."""
         outputs = self.get_outputs()
         return [MonitorConfig.from_sway_output(o) for o in outputs]
+
+    def get_workspaces(self) -> list[dict]:
+        """Query active workspaces."""
+        return self._send(IPC_GET_WORKSPACES)
+
+    def move_workspace_to_monitor(self, workspace: str, monitor: str) -> dict | list:
+        """Move a workspace to a different monitor."""
+        return self._send(IPC_COMMAND, f"[workspace={workspace}] move workspace to output {monitor}")
 
     def reload(self) -> dict:
         """Reload Sway configuration."""

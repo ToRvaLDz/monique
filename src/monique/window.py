@@ -315,6 +315,21 @@ class MainWindow(Adw.ApplicationWindow):
             row_no_dm.add_css_class("dim-label")
             grp_dm.add(row_no_dm)
 
+        # ── Workspaces group ──
+        grp_ws = Adw.PreferencesGroup(
+            title="Workspaces",
+            description="Configure workspace behavior on monitor changes",
+        )
+        page.add(grp_ws)
+
+        sw_migrate = Adw.SwitchRow(
+            title="Migrate workspaces on monitor removal",
+            subtitle="Move workspaces to primary monitor when their monitor is disabled",
+        )
+        sw_migrate.set_active(self._app_settings.get("migrate_workspaces", True))
+        sw_migrate.connect("notify::active", self._on_migrate_switch_changed)
+        grp_ws.add(sw_migrate)
+
         dialog.present(self)
 
     def _on_sddm_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
@@ -328,6 +343,14 @@ class MainWindow(Adw.ApplicationWindow):
             action.set_state(GLib.Variant.new_boolean(new_val))
         state = "enabled" if new_val else "disabled"
         self._toast(f"SDDM Xsetup update {state}")
+
+    def _on_migrate_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
+        """Handle the migrate workspaces switch toggle in preferences."""
+        new_val = row.get_active()
+        self._app_settings["migrate_workspaces"] = new_val
+        save_app_settings(self._app_settings)
+        state = "enabled" if new_val else "disabled"
+        self._toast(f"Workspace migration {state}")
 
     def _on_sddm_toggled(self, action: Gio.SimpleAction, param) -> None:
         """Toggle the 'update SDDM Xsetup' setting (from menu action)."""
@@ -641,6 +664,10 @@ class MainWindow(Adw.ApplicationWindow):
         conf_dir = hyprland_config_dir()
         monitors_conf = conf_dir / "monitors.conf"
 
+        # Snapshot workspaces before applying
+        self._ws_snapshot = self._ipc.get_workspaces()
+        self._migrated_workspaces: list[tuple[str, str]] = []
+
         # Backup
         backup_file(monitors_conf)
 
@@ -653,8 +680,32 @@ class MainWindow(Adw.ApplicationWindow):
             restore_backup(monitors_conf)
             return
 
+        # Migrate orphaned workspaces if setting is on
+        if self._app_settings.get("migrate_workspaces", True):
+            self._migrate_orphaned_workspaces(profile)
+
         # Show confirmation dialog with countdown
         self._show_confirm_dialog(monitors_conf)
+
+    def _migrate_orphaned_workspaces(self, profile: Profile) -> None:
+        """Move workspaces from disabled/removed monitors to the primary monitor."""
+        enabled_names = {m.name for m in profile.monitors if m.enabled}
+        if not enabled_names:
+            return
+
+        # Primary = first enabled monitor in profile
+        primary = next(m.name for m in profile.monitors if m.enabled)
+
+        self._migrated_workspaces = []
+        for ws in self._ws_snapshot:
+            ws_monitor = ws.get("monitor", "")
+            ws_name = str(ws.get("name", ws.get("id", "")))
+            if ws_monitor and ws_monitor not in enabled_names:
+                try:
+                    self._ipc.move_workspace_to_monitor(ws_name, primary)
+                    self._migrated_workspaces.append((ws_name, ws_monitor))
+                except Exception:
+                    pass
 
     def _show_confirm_dialog(self, conf_path) -> None:
         self._confirm_remaining = CONFIRM_TIMEOUT
@@ -696,11 +747,20 @@ class MainWindow(Adw.ApplicationWindow):
             bak = self._confirm_conf_path.with_suffix(self._confirm_conf_path.suffix + ".bak")
             if bak.exists():
                 bak.unlink()
+            self._migrated_workspaces = []
             self._toast("Settings kept")
         else:
             self._do_revert()
 
     def _do_revert(self) -> None:
+        # Restore migrated workspaces to their original monitors
+        for ws_name, original_monitor in self._migrated_workspaces:
+            try:
+                self._ipc.move_workspace_to_monitor(ws_name, original_monitor)
+            except Exception:
+                pass
+        self._migrated_workspaces = []
+
         if restore_backup(self._confirm_conf_path):
             try:
                 self._ipc.reload()
