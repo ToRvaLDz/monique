@@ -6,6 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "monique"
 version = "0.1.0"
 description = "MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland and Sway with drag-and-drop and auto-profile daemon"
+readme = "README.md"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
