@@ -1,6 +1,6 @@
 # Maintainer: Your Name <your@email.com>
 pkgname=monique
-pkgver=0.1.0
+pkgver=0.1.2
 pkgrel=1
 pkgdesc='MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland and Sway'
 arch=('any')
