@@ -37,6 +37,8 @@ jobs:
           name: dist
           path: dist/
       - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
 
   github-release:
     name: GitHub Release
@@ -54,7 +56,8 @@ jobs:
         run: |
           gh release create "${{ github.ref_name }}" dist/* \
             --title "${{ github.ref_name }}" \
-            --generate-notes
+            --generate-notes || \
+          gh release upload "${{ github.ref_name }}" dist/* --clobber
 
   aur:
     name: Publish to AUR
