@@ -43,6 +43,7 @@ class MonitorCanvas(Gtk.DrawingArea):
     def __init__(self) -> None:
         super().__init__()
         self._monitors: list[MonitorConfig] = []
+        self._use_description: bool = True
         self._selected: int = -1
         self._zoom: float = 0.15
         self._pan_x: float = 0.0
@@ -121,6 +122,11 @@ class MonitorCanvas(Gtk.DrawingArea):
             self._selected = value
             self.queue_draw()
             self.emit("monitor-selected", value)
+
+    def set_use_description(self, val: bool) -> None:
+        """Toggle between showing monitor descriptions vs port names."""
+        self._use_description = val
+        self.queue_draw()
 
     def _auto_fit(self) -> None:
         """Auto-fit zoom and pan to show all monitors."""
@@ -377,10 +383,16 @@ class MonitorCanvas(Gtk.DrawingArea):
             self._draw_monitor_text(cr, m, sx, sy, sw, sh)
 
     def _draw_monitor_text(self, cr, m: MonitorConfig, sx: float, sy: float, sw: float, sh: float) -> None:
+        # Clip text to monitor rectangle
+        cr.save()
+        padding = 4
+        cr.rectangle(sx + padding, sy + padding, sw - padding * 2, sh - padding * 2)
+        cr.clip()
+
         cr.set_source_rgb(*COLOR_TEXT)
 
-        # Name
-        name = m.name or "?"
+        # Name — show description when enabled, fall back to port name
+        name = (m.description if self._use_description and m.description else m.name) or "?"
         font_size = min(14, max(8, sw / 10))
         cr.set_font_size(font_size)
 
@@ -401,6 +413,8 @@ class MonitorCanvas(Gtk.DrawingArea):
         if ty + 4 < sy + sh:
             cr.move_to(tx, ty)
             cr.show_text(res_text)
+
+        cr.restore()
 
 
 def _rounded_rect(cr, x: float, y: float, w: float, h: float, r: float) -> None:

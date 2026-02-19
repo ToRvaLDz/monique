@@ -146,7 +146,9 @@ class HyprlandIPC:
             rules.append(rule)
         return rules
 
-    def apply_profile(self, profile: Profile, *, update_sddm: bool = True) -> None:
+    def apply_profile(
+        self, profile: Profile, *, update_sddm: bool = True, use_description: bool = False,
+    ) -> None:
         """Write monitor config and reload Hyprland."""
         conf_dir = hyprland_config_dir()
         monitors_conf = conf_dir / "monitors.conf"
@@ -155,13 +157,13 @@ class HyprlandIPC:
         backup_file(monitors_conf)
 
         # Write new config
-        write_text(monitors_conf, profile.generate_config())
+        write_text(monitors_conf, profile.generate_config(use_description=use_description))
 
         # Also write Sway config if Sway is installed
         if is_sway_installed():
             sway_conf = sway_config_dir() / "monitors.conf"
             backup_file(sway_conf)
-            write_text(sway_conf, profile.generate_sway_config())
+            write_text(sway_conf, profile.generate_sway_config(use_description=use_description))
 
         # Write SDDM Xsetup script if enabled and SDDM is present
         if update_sddm and is_sddm_running():
@@ -170,11 +172,23 @@ class HyprlandIPC:
         # Reload
         self.reload()
 
-    def apply_profile_keyword(self, profile: Profile) -> None:
+    def apply_profile_keyword(
+        self, profile: Profile, *, use_description: bool = False,
+    ) -> None:
         """Apply profile via keyword commands (live, no file write)."""
+        # Build name→identifier mapping
+        name_to_id: dict[str, str] = {}
+        for m in profile.monitors:
+            if use_description and m.description:
+                name_to_id[m.name] = f"desc:{m.description}"
+            else:
+                name_to_id[m.name] = m.name
+
         cmds: list[str] = []
         for m in profile.monitors:
-            line = m.to_hyprland_line()
+            line = m.to_hyprland_line(
+                use_description=use_description, name_to_id=name_to_id,
+            )
             # strip "monitor=" prefix for keyword command
             value = line.removeprefix("monitor=")
             cmds.append(f"keyword monitor {value}")

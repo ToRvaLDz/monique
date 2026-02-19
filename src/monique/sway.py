@@ -99,7 +99,9 @@ class SwayIPC:
         """Reload Sway configuration."""
         return self._send(IPC_COMMAND, "reload")
 
-    def apply_profile(self, profile: Profile, *, update_sddm: bool = True) -> None:
+    def apply_profile(
+        self, profile: Profile, *, update_sddm: bool = True, use_description: bool = False,
+    ) -> None:
         """Write monitor config and reload Sway."""
         conf_dir = sway_config_dir()
         monitors_conf = conf_dir / "monitors.conf"
@@ -108,13 +110,13 @@ class SwayIPC:
         backup_file(monitors_conf)
 
         # Write Sway config
-        write_text(monitors_conf, profile.generate_sway_config())
+        write_text(monitors_conf, profile.generate_sway_config(use_description=use_description))
 
         # Also write Hyprland config if Hyprland is installed
         if is_hyprland_installed():
             hypr_conf = hyprland_config_dir() / "monitors.conf"
             backup_file(hypr_conf)
-            write_text(hypr_conf, profile.generate_config())
+            write_text(hypr_conf, profile.generate_config(use_description=use_description))
 
         # Write SDDM Xsetup script if enabled and SDDM is present
         if update_sddm and is_sddm_running():

@@ -191,6 +191,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Canvas
         self._canvas = MonitorCanvas()
+        self._canvas.set_use_description(not self._app_settings.get("use_port_names", False))
         self._canvas.connect("monitor-selected", self._on_monitor_selected)
         self._canvas.connect("monitor-moved", self._on_monitor_moved)
         self._canvas.connect("monitor-double-clicked", self._on_monitor_double_clicked)
@@ -292,6 +293,22 @@ class MainWindow(Adw.ApplicationWindow):
         )
         dialog.add(page)
 
+        # ── Monitor Identification group ──
+        grp_id = Adw.PreferencesGroup(
+            title="Monitor Identification",
+            description="How monitors are identified in config files",
+        )
+        page.add(grp_id)
+
+        sw_port = Adw.SwitchRow(
+            title="Use port names (e.g. DP-1, HDMI-A-1)",
+            subtitle="When disabled, monitors are identified by description (recommended)",
+        )
+        sw_port.set_active(self._app_settings.get("use_port_names", False))
+        sw_port.connect("notify::active", self._on_port_names_switch_changed)
+        grp_id.add(sw_port)
+
+        # ── Display Manager group ──
         grp_dm = Adw.PreferencesGroup(
             title="Display Manager",
             description="Configure login screen integration",
@@ -351,6 +368,15 @@ class MainWindow(Adw.ApplicationWindow):
         save_app_settings(self._app_settings)
         state = "enabled" if new_val else "disabled"
         self._toast(f"Workspace migration {state}")
+
+    def _on_port_names_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
+        """Handle the port names switch toggle in preferences."""
+        new_val = row.get_active()
+        self._app_settings["use_port_names"] = new_val
+        save_app_settings(self._app_settings)
+        self._canvas.set_use_description(not new_val)
+        mode = "port names" if new_val else "descriptions"
+        self._toast(f"Monitor identification: {mode}")
 
     def _on_sddm_toggled(self, action: Gio.SimpleAction, param) -> None:
         """Toggle the 'update SDDM Xsetup' setting (from menu action)."""
@@ -654,10 +680,12 @@ class MainWindow(Adw.ApplicationWindow):
             monitor_names=names,
             monitor_descriptions=descs,
             monitor_enabled=enabled,
+            application=self.get_application(),
         )
         dialog.set_rules(self._workspace_rules)
         dialog.connect("rules-changed", self._on_workspace_rules_changed)
-        dialog.present(self)
+        dialog.set_transient_for(self)
+        dialog.present()
 
     def _on_workspace_rules_changed(self, panel: WorkspacePanel) -> None:
         self._workspace_rules = panel.get_rules()
@@ -690,7 +718,10 @@ class MainWindow(Adw.ApplicationWindow):
 
         try:
             update_sddm = self._app_settings.get("update_sddm", True)
-            self._ipc.apply_profile(profile, update_sddm=update_sddm)
+            use_desc = not self._app_settings.get("use_port_names", False)
+            self._ipc.apply_profile(
+                profile, update_sddm=update_sddm, use_description=use_desc,
+            )
             self._set_status("Configuration applied")
         except Exception as e:
             self._toast(f"Apply failed: {e}")
