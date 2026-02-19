@@ -1,4 +1,4 @@
-# Maintainer: Your Name <your@email.com>
+# Maintainer: Marco Migozzi <torvaldz@gmail.com>
 pkgname=monique
 pkgver=0.1.2
 pkgrel=1
