@@ -79,7 +79,7 @@ jobs:
         uses: docker://archlinux:latest
         with:
           entrypoint: bash
-          args: -c "pacman -Sy --noconfirm pacman-contrib && cd aur && makepkg --printsrcinfo > .SRCINFO"
+          args: -c "pacman -Sy --noconfirm pacman-contrib && useradd -m builder && chown -R builder aur && su builder -c 'cd aur && makepkg --printsrcinfo > .SRCINFO'"
       - name: Push to AUR
         env:
           AUR_SSH_KEY: ${{ secrets.AUR_SSH_KEY }}
