@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="data/com.github.monique.svg" width="96" alt="Monique icon">
+  <img src="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/com.github.monique.svg" width="96" alt="Monique icon">
 </p>
 
 <h1 align="center">Monique</h1>
@@ -35,21 +35,21 @@
 <table>
   <tr>
     <td align="center">
-      <a href="data/screenshots/1.png"><img src="data/screenshots/1.png" width="400" alt="Monitor layout editor"></a>
+      <a href="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/1.png"><img src="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/1.png" width="400" alt="Monitor layout editor"></a>
       <br><sub>Layout editor</sub>
     </td>
     <td align="center">
-      <a href="data/screenshots/2.png"><img src="data/screenshots/2.png" width="400" alt="Workspace rules"></a>
+      <a href="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/2.png"><img src="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/2.png" width="400" alt="Workspace rules"></a>
       <br><sub>Workspace rules</sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <a href="data/screenshots/3.png"><img src="data/screenshots/3.png" width="400" alt="Quick setup wizard"></a>
+      <a href="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/3.png"><img src="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/3.png" width="400" alt="Quick setup wizard"></a>
       <br><sub>Quick setup</sub>
     </td>
     <td align="center">
-      <a href="data/screenshots/4.png"><img src="data/screenshots/4.png" width="400" alt="SDDM preferences"></a>
+      <a href="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/4.png"><img src="https://raw.githubusercontent.com/ToRvaLDz/monique/main/data/screenshots/4.png" width="400" alt="SDDM preferences"></a>
       <br><sub>SDDM integration</sub>
     </td>
   </tr>
