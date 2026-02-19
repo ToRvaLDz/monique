@@ -260,8 +260,6 @@ class PropertiesPanel(Adw.PreferencesPage):
         # Available modes dropdown
         if monitor.available_modes:
             self._combo_resolution.set_model(Gtk.StringList.new(monitor.available_modes))
-            # Try to select current resolution
-            current = f"{monitor.width}x{monitor.height}@{monitor.refresh_rate:g}"
             # Find closest match
             for i, mode in enumerate(monitor.available_modes):
                 if mode.startswith(f"{monitor.width}x{monitor.height}"):

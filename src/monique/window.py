@@ -403,6 +403,7 @@ class MainWindow(Adw.ApplicationWindow):
             if n_disabled:
                 parts.append(f"{n_disabled} disabled")
             self._set_status(f"{len(self._monitors)} monitor(s) detected ({', '.join(parts)})")
+            self._select_matching_profile()
         except Exception as e:
             self._set_status(f"Error: {e}")
             self._toast(f"Cannot connect to Hyprland: {e}")
@@ -437,6 +438,22 @@ class MainWindow(Adw.ApplicationWindow):
             self._props.update_from_monitor(m)
         else:
             self._props.update_from_monitor(None)
+
+    def _select_matching_profile(self) -> None:
+        """If the current monitor layout matches a saved profile, select it."""
+        current_fp = sorted(m.description for m in self._monitors if m.description)
+        match = self._profile_mgr.find_best_match(current_fp)
+        if match is None:
+            return
+        model = self._profile_dropdown.get_model()
+        for i in range(model.get_n_items()):
+            if model.get_string(i) == match.name:
+                self._inhibit_profile_switch = True
+                self._profile_dropdown.set_selected(i)
+                self._current_profile_name = match.name
+                self._workspace_rules = match.workspace_rules
+                self._inhibit_profile_switch = False
+                break
 
     # ── Profile Management ───────────────────────────────────────────
 

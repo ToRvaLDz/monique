@@ -1,7 +1,6 @@
 [Unit]
 Description=Monique daemon - Auto-apply monitor profiles on hotplug
-After=graphical-session.target
-PartOf=graphical-session.target
+After=default.target
 
 [Service]
 Type=simple
@@ -10,4 +9,4 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=graphical-session.target
+WantedBy=default.target

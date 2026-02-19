@@ -6,8 +6,7 @@ import math
 
 import gi
 gi.require_version("Gtk", "4.0")
-gi.require_version("Gdk", "4.0")
-from gi.repository import Gtk, Gdk, GObject, GLib
+from gi.repository import Gtk, GObject
 
 from .models import MonitorConfig, PositionMode
 
