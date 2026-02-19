@@ -13,7 +13,7 @@
 <p align="center">
   <a href="https://github.com/ToRvaLDz/monique/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ToRvaLDz/monique/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://github.com/ToRvaLDz/monique/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/ToRvaLDz/monique?include_prereleases&label=release&color=orange"></a>
-  <a href="https://pypi.org/project/monique/"><img alt="PyPI" src="https://img.shields.io/pypi/v/monique?color=blue&label=PyPI"></a>
+  <a href="https://pypi.org/project/monique/"><img alt="PyPI" src="https://img.shields.io/pypi/v/monique?color=blue&label=PyPI&v=2"></a>
   <a href="https://aur.archlinux.org/packages/monique"><img alt="AUR" src="https://img.shields.io/aur/version/monique?color=1793d1&label=AUR"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11+-green">
