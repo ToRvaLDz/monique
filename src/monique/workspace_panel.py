@@ -10,8 +10,8 @@ from gi.repository import Gtk, Gdk, Adw, GLib, GObject
 from .models import WorkspaceRule
 
 
-class WorkspacePanel(Adw.Dialog):
-    """Dialog for managing workspace-to-monitor assignments."""
+class WorkspacePanel(Adw.Window):
+    """Window for managing workspace-to-monitor assignments."""
 
     __gtype_name__ = "WorkspacePanel"
 
@@ -24,8 +24,9 @@ class WorkspacePanel(Adw.Dialog):
         monitor_names: list[str] | None = None,
         monitor_descriptions: list[str] | None = None,
         monitor_enabled: list[bool] | None = None,
+        application: Gtk.Application | None = None,
     ) -> None:
-        super().__init__()
+        super().__init__(application=application)
         self._rules: list[WorkspaceRule] = []
         self._monitor_names = monitor_names or []
         self._monitor_descriptions = monitor_descriptions or []
@@ -34,17 +35,22 @@ class WorkspacePanel(Adw.Dialog):
         self._building = False
 
         self.set_title("Workspace Rules")
-        # Size to ~35% width, ~70% height of primary monitor
-        w, h = 500, 600
+        self.set_modal(True)
+        # Size to ~45% width, ~70% height of the largest monitor,
+        # but never smaller than 660x800 (unless the screen is smaller)
+        w, h = 660, 800
         display = Gdk.Display.get_default()
         if display:
             mons = display.get_monitors()
-            if mons.get_n_items() > 0:
-                geom = mons.get_item(0).get_geometry()
-                w = int(geom.width * 0.26)
-                h = int(geom.height * 0.7)
-        self.set_content_width(w)
-        self.set_content_height(h)
+            max_w, max_h = 0, 0
+            for i in range(mons.get_n_items()):
+                geom = mons.get_item(i).get_geometry()
+                max_w = max(max_w, geom.width)
+                max_h = max(max_h, geom.height)
+            if max_w > 0:
+                w = min(max_w, max(w, int(max_w * 0.45)))
+                h = min(max_h, max(h, int(max_h * 0.7)))
+        self.set_default_size(w, h)
 
         self._build_ui()
 
@@ -143,7 +149,7 @@ class WorkspacePanel(Adw.Dialog):
         self._stack.add_named(scroll, "rules")
 
         box.append(self._stack)
-        self.set_child(box)
+        self.set_content(box)
 
         self._update_stack_visible()
 
