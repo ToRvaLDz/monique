@@ -93,9 +93,11 @@ class MonitorDaemon:
                 log.info("Applying profile: %s", profile.name)
                 settings = load_app_settings()
                 update_sddm = settings.get("update_sddm", True)
+                update_greetd = settings.get("update_greetd", True)
                 use_desc = not settings.get("use_port_names", False)
                 ipc.apply_profile(
-                    profile, update_sddm=update_sddm, use_description=use_desc,
+                    profile, update_sddm=update_sddm,
+                    update_greetd=update_greetd, use_description=use_desc,
                 )
 
                 # Migrate orphaned workspaces

@@ -6,6 +6,7 @@ dist/
 build/
 *.bak
 .claude/
+CLAUDE.md
 pkg/
 *.pkg.tar.zst
 *.log

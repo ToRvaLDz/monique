@@ -115,6 +115,31 @@ def write_xsetup(content: str) -> None:
     )
 
 
+def greetd_sway_config_path() -> Path:
+    """Return the path to the greetd sway config file."""
+    return Path("/etc/greetd/sway-config")
+
+
+def greetd_monitors_path() -> Path:
+    """Return the path to the greetd monitors config file."""
+    return Path("/etc/greetd/monique-monitors.conf")
+
+
+def is_greetd_running() -> bool:
+    """Return True if greetd is configured with sway (sway-config exists)."""
+    return greetd_sway_config_path().exists()
+
+
+def write_greetd_monitors(content: str) -> None:
+    """Write the greetd monitors config using pkexec for root privileges."""
+    subprocess.run(
+        ["pkexec", "tee", str(greetd_monitors_path())],
+        input=content.encode(),
+        stdout=subprocess.DEVNULL,
+        check=True,
+    )
+
+
 def _settings_path() -> Path:
     """Return the path to the global app settings file."""
     return config_dir() / "settings.json"
