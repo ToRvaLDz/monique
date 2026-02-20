@@ -65,6 +65,7 @@
 - **Workspace rules** — configure workspace-to-monitor assignments
 - **Live preview** — OSD overlay to identify monitors (double-click)
 - **Workspace migration** — automatically moves workspaces to the primary monitor when their monitor is disabled or unplugged (reverted if you click "Revert")
+- **Clamshell mode** — disable the internal laptop display when external monitors are connected (manual toggle in the toolbar or automatic via daemon preferences); the daemon also monitors the lid state via UPower D-Bus
 - **Confirm-or-revert** — 10-second countdown after applying, auto-reverts if display is unusable
 
 ## Installation
@@ -122,6 +123,14 @@ systemctl --user enable --now moniqued
 ```
 
 The daemon auto-detects the active compositor and listens for monitor hotplug events. When a monitor is connected or disconnected, it waits 500ms (debounce) then applies the best matching profile. Orphaned workspaces are automatically migrated to the primary monitor (configurable via **Preferences > Migrate workspaces**).
+
+#### Clamshell mode
+
+On laptops, the daemon can automatically disable the internal display when external monitors are connected. Enable it from the GUI: **Menu > Preferences > Clamshell Mode**.
+
+The daemon also monitors the laptop lid state via UPower D-Bus: closing the lid disables the internal display, opening it re-enables it. On desktop PCs (no lid detected), clamshell mode simply disables any internal-type output (`eDP`, `LVDS`) whenever external monitors are present.
+
+> **Note:** if your system suspends on lid close, set `HandleLidSwitch=ignore` in `/etc/systemd/logind.conf` so the daemon can handle it instead.
 
 ### Behavior per environment
 

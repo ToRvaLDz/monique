@@ -137,6 +137,12 @@ class MonitorConfig:
             w, h = h, w
         return h / self.scale
 
+    @property
+    def is_internal(self) -> bool:
+        """True if this is a built-in laptop display (eDP or LVDS port)."""
+        prefix = self.name.split("-")[0].upper() if self.name else ""
+        return prefix in ("EDP", "LVDS", "DSI")
+
     # Mapping from Transform enum to xrandr --rotate / --reflect values
     # Each entry is (rotate, reflect_or_None)
     _XRANDR_TRANSFORMS: ClassVar[dict[int, tuple[str, str | None]]] = {
@@ -642,3 +648,34 @@ class Profile:
             lines.append(m.to_xrandr_cmd())
         lines.append("")
         return "\n".join(lines)
+
+
+# ── Clamshell Mode ────────────────────────────────────────────────────
+
+
+def apply_clamshell(monitors: list[MonitorConfig]) -> bool:
+    """Disable internal displays when external monitors are present and enabled.
+
+    Safety: does nothing if there are no enabled external monitors.
+    Returns True if any monitor was changed.
+    """
+    internals = [m for m in monitors if m.is_internal and m.enabled]
+    externals = [m for m in monitors if not m.is_internal and m.enabled]
+    if not internals or not externals:
+        return False
+    for m in internals:
+        m.enabled = False
+    return True
+
+
+def undo_clamshell(monitors: list[MonitorConfig]) -> bool:
+    """Re-enable internal displays that were disabled.
+
+    Returns True if any monitor was changed.
+    """
+    changed = False
+    for m in monitors:
+        if m.is_internal and not m.enabled:
+            m.enabled = True
+            changed = True
+    return changed

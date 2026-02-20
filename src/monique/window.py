@@ -11,7 +11,7 @@ from .canvas import MonitorCanvas
 from .properties_panel import PropertiesPanel
 from .workspace_panel import WorkspacePanel
 from .profile_manager import ProfileManager
-from .models import MonitorConfig, Profile, WorkspaceRule
+from .models import MonitorConfig, Profile, WorkspaceRule, apply_clamshell, undo_clamshell
 from .hyprland import HyprlandIPC
 from .utils import (
     hyprland_config_dir,
@@ -124,6 +124,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._inhibit_profile_switch: bool = False
         self._osd: MonitorOSD | None = None
         self._dirty: bool = False
+        self._inhibit_clamshell_toggle: bool = False
         self._app_settings = load_app_settings()
 
         self._build_ui()
@@ -177,6 +178,14 @@ class MainWindow(Adw.ApplicationWindow):
         btn_detect = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Detect monitors")
         btn_detect.connect("clicked", self._on_detect_clicked)
         header.pack_end(btn_detect)
+
+        # Clamshell mode toggle button
+        self._btn_clamshell = Gtk.ToggleButton(
+            icon_name="computer-symbolic",
+            tooltip_text="Clamshell mode (disable internal display)",
+        )
+        self._btn_clamshell.connect("toggled", self._on_clamshell_toggled)
+        header.pack_end(self._btn_clamshell)
 
         # Hamburger menu
         self._build_menu(header)
@@ -347,6 +356,22 @@ class MainWindow(Adw.ApplicationWindow):
         sw_migrate.connect("notify::active", self._on_migrate_switch_changed)
         grp_ws.add(sw_migrate)
 
+        # ── Clamshell Mode group ──
+        grp_clam = Adw.PreferencesGroup(
+            title="Clamshell Mode",
+            description="Automatically disable the internal display when external monitors are connected",
+        )
+        page.add(grp_clam)
+
+        sw_clamshell = Adw.SwitchRow(
+            title="Enable clamshell mode",
+            subtitle="Disable laptop screen when external monitors are present (daemon)",
+            icon_name="computer-symbolic",
+        )
+        sw_clamshell.set_active(self._app_settings.get("clamshell_mode", False))
+        sw_clamshell.connect("notify::active", self._on_clamshell_switch_changed)
+        grp_clam.add(sw_clamshell)
+
         dialog.present(self)
 
     def _on_sddm_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
@@ -377,6 +402,51 @@ class MainWindow(Adw.ApplicationWindow):
         self._canvas.set_use_description(not new_val)
         mode = "port names" if new_val else "descriptions"
         self._toast(f"Monitor identification: {mode}")
+
+    def _on_clamshell_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
+        """Handle the clamshell mode switch toggle in preferences."""
+        new_val = row.get_active()
+        self._app_settings["clamshell_mode"] = new_val
+        save_app_settings(self._app_settings)
+        state = "enabled" if new_val else "disabled"
+        self._toast(f"Clamshell mode {state}")
+
+    def _on_clamshell_toggled(self, btn: Gtk.ToggleButton) -> None:
+        """Handle the clamshell toggle button in the headerbar."""
+        if self._inhibit_clamshell_toggle:
+            return
+
+        internals = [m for m in self._monitors if m.is_internal]
+        externals = [m for m in self._monitors if not m.is_internal]
+
+        if btn.get_active():
+            # Activate clamshell
+            if not internals:
+                self._toast("No internal display detected")
+                self._inhibit_clamshell_toggle = True
+                btn.set_active(False)
+                self._inhibit_clamshell_toggle = False
+                return
+            if not any(m.enabled for m in externals):
+                self._toast("No external monitor enabled")
+                self._inhibit_clamshell_toggle = True
+                btn.set_active(False)
+                self._inhibit_clamshell_toggle = False
+                return
+            if apply_clamshell(self._monitors):
+                self._canvas.monitors = self._monitors
+                self._place_disabled_monitors()
+                self._canvas.queue_draw()
+                self._update_properties_for_selected()
+                self._on_apply_clicked(None)
+        else:
+            # Deactivate clamshell
+            if undo_clamshell(self._monitors):
+                self._canvas.monitors = self._monitors
+                self._place_disabled_monitors()
+                self._canvas.queue_draw()
+                self._update_properties_for_selected()
+                self._on_apply_clicked(None)
 
     def _on_sddm_toggled(self, action: Gio.SimpleAction, param) -> None:
         """Toggle the 'update SDDM Xsetup' setting (from menu action)."""
@@ -429,6 +499,12 @@ class MainWindow(Adw.ApplicationWindow):
             if n_disabled:
                 parts.append(f"{n_disabled} disabled")
             self._set_status(f"{len(self._monitors)} monitor(s) detected ({', '.join(parts)})")
+            # Sync clamshell toggle: active if an internal is disabled while externals are present
+            has_disabled_internal = any(m.is_internal and not m.enabled for m in self._monitors)
+            has_enabled_external = any(not m.is_internal and m.enabled for m in self._monitors)
+            self._inhibit_clamshell_toggle = True
+            self._btn_clamshell.set_active(has_disabled_internal and has_enabled_external)
+            self._inhibit_clamshell_toggle = False
             self._select_matching_profile()
         except Exception as e:
             self._set_status(f"Error: {e}")
