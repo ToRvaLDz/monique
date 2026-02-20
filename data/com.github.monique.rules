@@ -1,7 +1,8 @@
 polkit.addRule(function(action, subject) {
     if (action.id === "org.freedesktop.policykit.exec" &&
         action.lookup("program") === "/usr/bin/tee" &&
-        action.lookup("command_line").indexOf("/usr/share/sddm/scripts/Xsetup") !== -1 &&
+        (action.lookup("command_line").indexOf("/usr/share/sddm/scripts/Xsetup") !== -1 ||
+         action.lookup("command_line").indexOf("/etc/greetd/monique-monitors.conf") !== -1) &&
         subject.active === true &&
         subject.local  === true) {
         return polkit.Result.YES;

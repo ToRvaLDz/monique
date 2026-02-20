@@ -18,6 +18,7 @@ from .utils import (
     backup_file,
     restore_backup,
     is_sddm_running,
+    is_greetd_running,
     load_app_settings,
     save_app_settings,
 )
@@ -253,13 +254,13 @@ class MainWindow(Adw.ApplicationWindow):
         menu = Gio.Menu()
 
         # ── Settings section ──
-        if is_sddm_running():
-            section_settings = Gio.Menu()
-            item_prefs = Gio.MenuItem.new("Preferences", "win.preferences")
-            item_prefs.set_icon(Gio.ThemedIcon.new("preferences-system-symbolic"))
-            section_settings.append_item(item_prefs)
-            menu.append_section(None, section_settings)
+        section_settings = Gio.Menu()
+        item_prefs = Gio.MenuItem.new("Preferences", "win.preferences")
+        item_prefs.set_icon(Gio.ThemedIcon.new("preferences-system-symbolic"))
+        section_settings.append_item(item_prefs)
+        menu.append_section(None, section_settings)
 
+        if is_sddm_running():
             # SDDM toggle action (used in preferences dialog)
             update_sddm = self._app_settings.get("update_sddm", True)
             action_sddm = Gio.SimpleAction.new_stateful(
@@ -324,7 +325,10 @@ class MainWindow(Adw.ApplicationWindow):
         )
         page.add(grp_dm)
 
+        has_dm = False
+
         if is_sddm_running():
+            has_dm = True
             sw_sddm = Adw.SwitchRow(
                 title="Update SDDM Xsetup",
                 subtitle="Write xrandr layout to the SDDM login screen script",
@@ -333,7 +337,19 @@ class MainWindow(Adw.ApplicationWindow):
             sw_sddm.set_active(self._app_settings.get("update_sddm", True))
             sw_sddm.connect("notify::active", self._on_sddm_switch_changed)
             grp_dm.add(sw_sddm)
-        else:
+
+        if is_greetd_running():
+            has_dm = True
+            sw_greetd = Adw.SwitchRow(
+                title="Update greetd sway config",
+                subtitle="Add 'include /etc/greetd/monique-monitors.conf' to your sway-config",
+                icon_name="system-lock-screen-symbolic",
+            )
+            sw_greetd.set_active(self._app_settings.get("update_greetd", True))
+            sw_greetd.connect("notify::active", self._on_greetd_switch_changed)
+            grp_dm.add(sw_greetd)
+
+        if not has_dm:
             row_no_dm = Adw.ActionRow(
                 title="No supported display manager detected",
                 icon_name="dialog-information-symbolic",
@@ -385,6 +401,14 @@ class MainWindow(Adw.ApplicationWindow):
             action.set_state(GLib.Variant.new_boolean(new_val))
         state = "enabled" if new_val else "disabled"
         self._toast(f"SDDM Xsetup update {state}")
+
+    def _on_greetd_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
+        """Handle the greetd switch toggle in preferences."""
+        new_val = row.get_active()
+        self._app_settings["update_greetd"] = new_val
+        save_app_settings(self._app_settings)
+        state = "enabled" if new_val else "disabled"
+        self._toast(f"greetd monitor config update {state}")
 
     def _on_migrate_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
         """Handle the migrate workspaces switch toggle in preferences."""
@@ -794,9 +818,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         try:
             update_sddm = self._app_settings.get("update_sddm", True)
+            update_greetd = self._app_settings.get("update_greetd", True)
             use_desc = not self._app_settings.get("use_port_names", False)
             self._ipc.apply_profile(
-                profile, update_sddm=update_sddm, use_description=use_desc,
+                profile, update_sddm=update_sddm, update_greetd=update_greetd,
+                use_description=use_desc,
             )
             self._set_status("Configuration applied")
         except Exception as e:

@@ -15,7 +15,9 @@ from .utils import (
     hyprland_config_dir,
     sway_config_dir,
     is_sddm_running,
+    is_greetd_running,
     write_xsetup,
+    write_greetd_monitors,
     write_text,
     backup_file,
 )
@@ -100,7 +102,8 @@ class SwayIPC:
         return self._send(IPC_COMMAND, "reload")
 
     def apply_profile(
-        self, profile: Profile, *, update_sddm: bool = True, use_description: bool = False,
+        self, profile: Profile, *, update_sddm: bool = True,
+        update_greetd: bool = True, use_description: bool = False,
     ) -> None:
         """Write monitor config and reload Sway."""
         conf_dir = sway_config_dir()
@@ -121,6 +124,10 @@ class SwayIPC:
         # Write SDDM Xsetup script if enabled and SDDM is present
         if update_sddm and is_sddm_running():
             write_xsetup(profile.generate_xsetup_script())
+
+        # Write greetd sway monitors config if enabled and greetd is present
+        if update_greetd and is_greetd_running():
+            write_greetd_monitors(profile.generate_sway_config(use_description=use_description))
 
         # Reload
         self.reload()
