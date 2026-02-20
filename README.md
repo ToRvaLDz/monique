@@ -61,7 +61,7 @@
 - **Multi-backend** — auto-detects Hyprland or Sway from the environment
 - **Profile system** — save, load, and switch between monitor configurations
 - **Hotplug daemon** (`moniqued`) — automatically applies the best matching profile when monitors are connected or disconnected
-- **SDDM integration** — syncs your layout to the login screen via xrandr (with polkit rule for passwordless writes)
+- **Display manager integration** — syncs your layout to the login screen for SDDM (xrandr) and greetd (sway), with polkit rule for passwordless writes
 - **Workspace rules** — configure workspace-to-monitor assignments
 - **Live preview** — OSD overlay to identify monitors (double-click)
 - **Workspace migration** — automatically moves workspaces to the primary monitor when their monitor is disabled or unplugged (reverted if you click "Revert")
@@ -131,9 +131,14 @@ The daemon auto-detects the active compositor and listens for monitor hotplug ev
 | Sway | `$SWAYSOCK` | `output` events via i3-ipc subscribe |
 | Neither | Warning, retry every 5s | — |
 
-## SDDM integration
+## Display manager integration
 
-Monique can sync your monitor layout to the SDDM login screen by writing an `Xsetup` script with xrandr commands.
+Monique can sync your monitor layout to the login screen for supported display managers.
+
+| Display Manager | Method | Config path |
+|---|---|---|
+| SDDM | xrandr via `Xsetup` script | `/usr/share/sddm/scripts/Xsetup` |
+| greetd (sway) | sway `output` commands | `/etc/greetd/monique-monitors.conf` |
 
 A polkit rule is included to allow passwordless writes:
 
@@ -142,7 +147,7 @@ A polkit rule is included to allow passwordless writes:
 # /usr/share/polkit-1/rules.d/60-com.github.monique.rules
 ```
 
-Toggle SDDM sync from the GUI: **Menu > Preferences > Update SDDM Xsetup**.
+Toggle from the GUI: **Menu > Preferences > Update SDDM Xsetup** or **Update greetd config**.
 
 ## Configuration
 
