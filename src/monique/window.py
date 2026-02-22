@@ -540,6 +540,9 @@ class MainWindow(Adw.ApplicationWindow):
             names = [mon.name for mon in self._monitors]
             self._props.set_mirror_monitors(names)
             self._props.update_from_monitor(m)
+            # Lock enabled switch for internal monitors when clamshell is active
+            clamshell = self._app_settings.get("clamshell_mode", False)
+            self._props.set_enabled_locked(clamshell and m.is_internal)
         else:
             self._props.update_from_monitor(None)
 

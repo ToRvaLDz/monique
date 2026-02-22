@@ -84,6 +84,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._sw_enabled = Adw.SwitchRow(title="Enabled", icon_name="system-shutdown-symbolic")
         self._sw_enabled.connect("notify::active", self._on_changed)
         grp_info.add(self._sw_enabled)
+        self._enabled_locked = False
 
         # ── Resolution ───────────────────────────────────────────────
         grp_res = Adw.PreferencesGroup(title="Resolution")
@@ -229,6 +230,14 @@ class PropertiesPanel(Adw.PreferencesPage):
         grp_reserved.add(self._spin_res_right)
         _fix_spin_icons(self._spin_res_right)
 
+    def set_enabled_locked(self, locked: bool) -> None:
+        """Lock the Enabled switch (e.g. for clamshell-managed monitors)."""
+        self._enabled_locked = locked
+        self._sw_enabled.set_sensitive(not locked)
+        self._sw_enabled.set_subtitle(
+            "Managed by clamshell mode" if locked else "",
+        )
+
     def set_mirror_monitors(self, names: list[str]) -> None:
         """Update the mirror dropdown with available monitor names."""
         self._building = True
@@ -251,6 +260,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._lbl_name.set_label(monitor.name or "—")
         self._lbl_desc.set_label(monitor.description or "—")
         self._sw_enabled.set_active(monitor.enabled)
+        self._sw_enabled.set_sensitive(not self._enabled_locked)
 
         # Resolution mode
         res_modes = [m.value for m in ResolutionMode]
