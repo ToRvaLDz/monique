@@ -127,12 +127,16 @@ class MonitorDaemon:
 
             profile = self._profile_mgr.find_best_match(fingerprint, monitors)
             if profile:
-                # Apply clamshell mode if enabled and lid is closed
-                if clamshell and self._lid_closed is not False:
+                # When clamshell is active, the daemon owns internal display
+                # control.  First ensure internal monitors are enabled
+                # (handles profiles saved with the old manual toggle), then
+                # disable them if the lid is closed.
+                if clamshell:
                     profile = Profile.from_dict(profile.to_dict())
-                    if apply_clamshell(profile.monitors):
+                    undo_clamshell(profile.monitors)
+                    if self._lid_closed is not False:
+                        apply_clamshell(profile.monitors)
                         log.info("Clamshell: lid closed, disabled internal display(s)")
-                # Lid open → apply profile as-is (respect user's saved config)
 
                 # Snapshot workspaces before applying
                 ws_snapshot = ipc.get_workspaces()
