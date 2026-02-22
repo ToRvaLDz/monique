@@ -16,6 +16,7 @@ optdepends=(
     'sway: Sway compositor support'
     'sddm: login screen layout sync via Xsetup'
     'polkit: passwordless SDDM Xsetup writes'
+    'python-pyudev: hardware hotplug detection for Niri'
 )
 makedepends=(
     'python-build'

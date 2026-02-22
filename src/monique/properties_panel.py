@@ -61,6 +61,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         super().__init__()
         self._monitor: MonitorConfig | None = None
         self._building = False
+        self._backend: str = "hyprland"  # "hyprland", "sway", or "niri"
 
         self._build_ui()
 
@@ -165,70 +166,120 @@ class PropertiesPanel(Adw.PreferencesPage):
         grp_scale.add(self._combo_transform)
 
         # ── Advanced ─────────────────────────────────────────────────
-        grp_adv = Adw.PreferencesGroup(title="Advanced")
-        self.add(grp_adv)
+        self._grp_adv = Adw.PreferencesGroup(title="Advanced")
+        self.add(self._grp_adv)
 
         self._combo_mirror = Adw.ComboRow(title="Mirror Of", icon_name="edit-copy-symbolic")
         self._combo_mirror.connect("notify::selected", self._on_changed)
-        grp_adv.add(self._combo_mirror)
+        self._grp_adv.add(self._combo_mirror)
 
         self._combo_bitdepth = Adw.ComboRow(title="Bit Depth", icon_name="color-select-symbolic")
         self._combo_bitdepth.set_model(Gtk.StringList.new(["8", "10"]))
         self._combo_bitdepth.connect("notify::selected", self._on_changed)
-        grp_adv.add(self._combo_bitdepth)
+        self._grp_adv.add(self._combo_bitdepth)
 
         self._combo_vrr = Adw.ComboRow(title="VRR", icon_name="display-brightness-symbolic")
         self._combo_vrr.set_model(Gtk.StringList.new(["Off", "On", "Fullscreen only"]))
         self._combo_vrr.connect("notify::selected", self._on_changed)
-        grp_adv.add(self._combo_vrr)
+        self._grp_adv.add(self._combo_vrr)
 
         self._combo_cm = Adw.ComboRow(title="Color Management", icon_name="applications-graphics-symbolic")
         cm_options = ["None", "auto", "srgb", "dcip3", "dp3", "adobe", "wide", "edid", "hdr", "hdredid"]
         self._combo_cm.set_model(Gtk.StringList.new(cm_options))
         self._combo_cm.connect("notify::selected", self._on_changed)
-        grp_adv.add(self._combo_cm)
+        self._grp_adv.add(self._combo_cm)
 
         self._spin_sdr_bright = Adw.SpinRow.new_with_range(0.0, 5.0, 0.05)
         self._spin_sdr_bright.set_title("SDR Brightness")
         self._spin_sdr_bright.set_digits(2)
         self._spin_sdr_bright.connect("notify::value", self._on_changed)
-        grp_adv.add(self._spin_sdr_bright)
+        self._grp_adv.add(self._spin_sdr_bright)
         _fix_spin_icons(self._spin_sdr_bright)
 
         self._spin_sdr_sat = Adw.SpinRow.new_with_range(0.0, 5.0, 0.05)
         self._spin_sdr_sat.set_title("SDR Saturation")
         self._spin_sdr_sat.set_digits(2)
         self._spin_sdr_sat.connect("notify::value", self._on_changed)
-        grp_adv.add(self._spin_sdr_sat)
+        self._grp_adv.add(self._spin_sdr_sat)
         _fix_spin_icons(self._spin_sdr_sat)
 
         # ── Reserved Area ────────────────────────────────────────────
-        grp_reserved = Adw.PreferencesGroup(title="Reserved Area")
-        self.add(grp_reserved)
+        self._grp_reserved = Adw.PreferencesGroup(title="Reserved Area")
+        self.add(self._grp_reserved)
 
         self._spin_res_top = Adw.SpinRow.new_with_range(0, 500, 1)
         self._spin_res_top.set_title("Top")
         self._spin_res_top.connect("notify::value", self._on_changed)
-        grp_reserved.add(self._spin_res_top)
+        self._grp_reserved.add(self._spin_res_top)
         _fix_spin_icons(self._spin_res_top)
 
         self._spin_res_bottom = Adw.SpinRow.new_with_range(0, 500, 1)
         self._spin_res_bottom.set_title("Bottom")
         self._spin_res_bottom.connect("notify::value", self._on_changed)
-        grp_reserved.add(self._spin_res_bottom)
+        self._grp_reserved.add(self._spin_res_bottom)
         _fix_spin_icons(self._spin_res_bottom)
 
         self._spin_res_left = Adw.SpinRow.new_with_range(0, 500, 1)
         self._spin_res_left.set_title("Left")
         self._spin_res_left.connect("notify::value", self._on_changed)
-        grp_reserved.add(self._spin_res_left)
+        self._grp_reserved.add(self._spin_res_left)
         _fix_spin_icons(self._spin_res_left)
 
         self._spin_res_right = Adw.SpinRow.new_with_range(0, 500, 1)
         self._spin_res_right.set_title("Right")
         self._spin_res_right.connect("notify::value", self._on_changed)
-        grp_reserved.add(self._spin_res_right)
+        self._grp_reserved.add(self._spin_res_right)
         _fix_spin_icons(self._spin_res_right)
+
+    def set_compositor(self, backend: str) -> None:
+        """Disable controls not supported by the active compositor.
+
+        backend should be "hyprland", "sway", or "niri".
+        """
+        self._backend = backend
+        is_hyprland = backend == "hyprland"
+
+        # Hyprland-only Advanced controls
+        self._combo_mirror.set_sensitive(is_hyprland)
+        self._combo_bitdepth.set_sensitive(is_hyprland)
+        self._combo_cm.set_sensitive(is_hyprland)
+        self._spin_sdr_bright.set_sensitive(is_hyprland)
+        self._spin_sdr_sat.set_sensitive(is_hyprland)
+
+        # Reserved Area: Hyprland only
+        self._grp_reserved.set_sensitive(is_hyprland)
+
+        # VRR: Sway/Niri only support Off/On (no "Fullscreen only")
+        if is_hyprland:
+            self._combo_vrr.set_model(Gtk.StringList.new(["Off", "On", "Fullscreen only"]))
+        else:
+            self._combo_vrr.set_model(Gtk.StringList.new(["Off", "On"]))
+
+        # Position mode: Sway/Niri only support explicit
+        if is_hyprland:
+            pos_modes = Gtk.StringList.new([m.value for m in PositionMode])
+        else:
+            pos_modes = Gtk.StringList.new([PositionMode.EXPLICIT.value])
+        self._combo_pos_mode.set_model(pos_modes)
+        self._combo_pos_mode.set_sensitive(is_hyprland)
+
+        # Scale mode: Sway/Niri only support explicit
+        if is_hyprland:
+            scale_modes = Gtk.StringList.new([m.value for m in ScaleMode])
+        else:
+            scale_modes = Gtk.StringList.new([ScaleMode.EXPLICIT.value])
+        self._combo_scale_mode.set_model(scale_modes)
+        self._combo_scale_mode.set_sensitive(is_hyprland)
+
+        # Resolution mode: Sway/Niri only support explicit and preferred
+        if is_hyprland:
+            res_modes = Gtk.StringList.new([m.value for m in ResolutionMode])
+        else:
+            res_modes = Gtk.StringList.new([
+                ResolutionMode.EXPLICIT.value,
+                ResolutionMode.PREFERRED.value,
+            ])
+        self._combo_res_mode.set_model(res_modes)
 
     def set_enabled_locked(self, locked: bool) -> None:
         """Lock the Enabled switch (e.g. for clamshell-managed monitors)."""
@@ -263,8 +314,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._sw_enabled.set_sensitive(not self._enabled_locked)
 
         # Resolution mode
-        res_modes = [m.value for m in ResolutionMode]
-        idx = res_modes.index(monitor.resolution_mode.value) if monitor.resolution_mode.value in res_modes else 0
+        idx = self._find_combo_index(self._combo_res_mode, monitor.resolution_mode.value)
         self._combo_res_mode.set_selected(idx)
 
         # Available modes dropdown
@@ -290,8 +340,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_refresh.set_visible(is_explicit)
 
         # Position mode
-        pos_modes = [m.value for m in PositionMode]
-        idx = pos_modes.index(monitor.position_mode.value) if monitor.position_mode.value in pos_modes else 0
+        idx = self._find_combo_index(self._combo_pos_mode, monitor.position_mode.value)
         self._combo_pos_mode.set_selected(idx)
 
         self._spin_x.set_value(monitor.x)
@@ -301,8 +350,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_y.set_visible(is_explicit_pos)
 
         # Scale
-        scale_modes = [m.value for m in ScaleMode]
-        idx = scale_modes.index(monitor.scale_mode.value) if monitor.scale_mode.value in scale_modes else 0
+        idx = self._find_combo_index(self._combo_scale_mode, monitor.scale_mode.value)
         self._combo_scale_mode.set_selected(idx)
         self._spin_scale.set_value(monitor.scale)
         self._spin_scale.set_visible(monitor.scale_mode == ScaleMode.EXPLICIT)
@@ -323,7 +371,9 @@ class PropertiesPanel(Adw.PreferencesPage):
 
         # Advanced
         self._combo_bitdepth.set_selected(0 if monitor.bitdepth == 8 else 1)
-        self._combo_vrr.set_selected(monitor.vrr.value)
+        vrr_model = self._combo_vrr.get_model()
+        vrr_idx = min(monitor.vrr.value, vrr_model.get_n_items() - 1) if vrr_model else 0
+        self._combo_vrr.set_selected(vrr_idx)
 
         cm_options = ["None", "auto", "srgb", "dcip3", "dp3", "adobe", "wide", "edid", "hdr", "hdredid"]
         cm_val = monitor.color_management or "None"
@@ -350,8 +400,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         m.enabled = self._sw_enabled.get_active()
 
         # Resolution mode
-        res_modes = list(ResolutionMode)
-        m.resolution_mode = res_modes[self._combo_res_mode.get_selected()]
+        m.resolution_mode = self._combo_enum_value(self._combo_res_mode, ResolutionMode, ResolutionMode.EXPLICIT)
 
         if m.resolution_mode == ResolutionMode.EXPLICIT:
             # Check if a mode was selected from dropdown
@@ -367,15 +416,13 @@ class PropertiesPanel(Adw.PreferencesPage):
                 m.refresh_rate = round(self._spin_refresh.get_value(), 2)
 
         # Position
-        pos_modes = list(PositionMode)
-        m.position_mode = pos_modes[self._combo_pos_mode.get_selected()]
+        m.position_mode = self._combo_enum_value(self._combo_pos_mode, PositionMode, PositionMode.EXPLICIT)
         if m.position_mode == PositionMode.EXPLICIT:
             m.x = int(self._spin_x.get_value())
             m.y = int(self._spin_y.get_value())
 
         # Scale
-        scale_modes = list(ScaleMode)
-        m.scale_mode = scale_modes[self._combo_scale_mode.get_selected()]
+        m.scale_mode = self._combo_enum_value(self._combo_scale_mode, ScaleMode, ScaleMode.EXPLICIT)
         if m.scale_mode == ScaleMode.EXPLICIT:
             m.scale = round(self._spin_scale.get_value(), 2)
 
@@ -429,8 +476,7 @@ class PropertiesPanel(Adw.PreferencesPage):
     def _on_res_mode_changed(self, *args) -> None:
         if self._building:
             return
-        res_modes = list(ResolutionMode)
-        mode = res_modes[self._combo_res_mode.get_selected()]
+        mode = self._combo_enum_value(self._combo_res_mode, ResolutionMode, ResolutionMode.EXPLICIT)
         is_explicit = mode == ResolutionMode.EXPLICIT
         self._combo_resolution.set_visible(is_explicit)
         self._spin_width.set_visible(is_explicit)
@@ -456,8 +502,7 @@ class PropertiesPanel(Adw.PreferencesPage):
     def _on_pos_mode_changed(self, *args) -> None:
         if self._building:
             return
-        pos_modes = list(PositionMode)
-        mode = pos_modes[self._combo_pos_mode.get_selected()]
+        mode = self._combo_enum_value(self._combo_pos_mode, PositionMode, PositionMode.EXPLICIT)
         is_explicit = mode == PositionMode.EXPLICIT
         self._spin_x.set_visible(is_explicit)
         self._spin_y.set_visible(is_explicit)
@@ -466,7 +511,28 @@ class PropertiesPanel(Adw.PreferencesPage):
     def _on_scale_mode_changed(self, *args) -> None:
         if self._building:
             return
-        scale_modes = list(ScaleMode)
-        mode = scale_modes[self._combo_scale_mode.get_selected()]
+        mode = self._combo_enum_value(self._combo_scale_mode, ScaleMode, ScaleMode.EXPLICIT)
         self._spin_scale.set_visible(mode == ScaleMode.EXPLICIT)
         self._on_changed()
+
+    @staticmethod
+    def _find_combo_index(combo: Adw.ComboRow, value: str) -> int:
+        """Find the index of a string value in a ComboRow's model."""
+        model = combo.get_model()
+        if model:
+            for i in range(model.get_n_items()):
+                if model.get_string(i) == value:
+                    return i
+        return 0
+
+    @staticmethod
+    def _combo_enum_value(combo: Adw.ComboRow, enum_cls, default):
+        """Read the selected ComboRow string and convert to an enum member."""
+        model = combo.get_model()
+        sel = combo.get_selected()
+        if model and sel != Gtk.INVALID_LIST_POSITION and sel < model.get_n_items():
+            val = model.get_string(sel)
+            for member in enum_cls:
+                if member.value == val:
+                    return member
+        return default

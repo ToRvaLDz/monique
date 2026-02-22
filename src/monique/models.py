@@ -122,10 +122,15 @@ class MonitorConfig:
     enabled: bool = True
 
     def __post_init__(self) -> None:
-        # Hyprland appends "Unknown" for missing serials, Sway omits it.
-        # Normalize so fingerprints match across compositors and saved profiles.
+        # Normalize description so fingerprints match across compositors.
+        # Hyprland appends "Unknown" for missing serials, Sway/Niri omit it.
         if self.description.endswith(" Unknown"):
             self.description = self.description[:-8]
+        # Niri wraps some vendor names in PNP(…); strip for cross-compositor matching.
+        if self.description.startswith("PNP("):
+            paren = self.description.find(") ")
+            if paren != -1:
+                self.description = self.description[4:paren] + self.description[paren + 1:]
 
     @property
     def logical_width(self) -> float:
@@ -181,6 +186,12 @@ class MonitorConfig:
         v: k for k, v in _SWAY_TRANSFORMS.items()
     }
 
+    # Mapping from Niri JSON transform string -> Transform enum value
+    _NIRI_TRANSFORMS_INV: ClassVar[dict[str, int]] = {
+        "Normal": 0, "90": 1, "180": 2, "270": 3,
+        "Flipped": 4, "Flipped90": 5, "Flipped180": 6, "Flipped270": 7,
+    }
+
     def to_sway_block(self, use_description: bool = False) -> str:
         """Generate the `output` config block for sway."""
         identifier = (
@@ -210,6 +221,58 @@ class MonitorConfig:
 
         # VRR → adaptive_sync
         lines.append(f"    adaptive_sync {'on' if self.vrr != VRR.OFF else 'off'}")
+
+        body = "\n".join(lines)
+        return f"output {identifier} {{\n{body}\n}}"
+
+    def to_niri_block(
+        self, use_description: bool = False,
+        niri_ids: dict[str, str] | None = None,
+    ) -> str:
+        """Generate the ``output`` config block for Niri (KDL format).
+
+        *niri_ids* maps normalised description → Niri-native description
+        (e.g. ``"AOC 2757 …"`` → ``"PNP(AOC) 2757 …"``).  When available
+        and *use_description* is True, the Niri-native string is used so the
+        compositor can match it.  Falls back to connector name.
+        """
+        if use_description and self.description:
+            if niri_ids and self.description in niri_ids:
+                identifier = f'"{niri_ids[self.description]}"'
+            elif niri_ids is None:
+                # No mapping available, best-effort with normalised description
+                identifier = f'"{self.description}"'
+            else:
+                # Mapping available but monitor not in it (e.g. off monitor
+                # not currently visible to Niri); fall back to port name
+                identifier = f'"{self.name}"'
+        else:
+            identifier = f'"{self.name}"'
+        if not self.enabled:
+            return f"output {identifier} {{\n    off\n}}"
+
+        lines: list[str] = []
+
+        # Resolution
+        if self.resolution_mode == ResolutionMode.EXPLICIT:
+            lines.append(f'    mode "{self.width}x{self.height}@{self.refresh_rate:.3f}"')
+
+        # Scale
+        if self.scale_mode == ScaleMode.EXPLICIT:
+            lines.append(f"    scale {self.scale:g}")
+
+        # Transform (same values as Sway)
+        transform_str = self._SWAY_TRANSFORMS[self.transform.value]
+        if transform_str != "normal":
+            lines.append(f'    transform "{transform_str}"')
+
+        # Position
+        if self.position_mode == PositionMode.EXPLICIT:
+            lines.append(f"    position x={self.x} y={self.y}")
+
+        # VRR
+        if self.vrr != VRR.OFF:
+            lines.append("    variable-refresh-rate")
 
         body = "\n".join(lines)
         return f"output {identifier} {{\n{body}\n}}"
@@ -461,6 +524,79 @@ class MonitorConfig:
             vrr=vrr_val,
         )
 
+    @classmethod
+    def from_niri_output(cls, name: str, data: dict) -> MonitorConfig:
+        """Create from Niri IPC Outputs JSON (name is the connector like "DP-2")."""
+        make = data.get("make", "")
+        model = data.get("model", "")
+        serial = data.get("serial") or ""
+        parts = [p for p in (make, model, serial) if p]
+        description = " ".join(parts)
+
+        # Current mode
+        modes_list = data.get("modes", [])
+        current_mode_idx = data.get("current_mode")
+        if current_mode_idx is not None and 0 <= current_mode_idx < len(modes_list):
+            current_mode = modes_list[current_mode_idx]
+        else:
+            current_mode = {}
+        width = current_mode.get("width", 1920)
+        height = current_mode.get("height", 1080)
+        # Niri reports refresh in millihertz
+        refresh_mhz = current_mode.get("refresh_rate", 60000)
+        refresh_rate = round(refresh_mhz / 1000.0, 2)
+
+        # Available modes
+        available: list[str] = []
+        for m in modes_list:
+            mw = m.get("width", 0)
+            mh = m.get("height", 0)
+            mr = round(m.get("refresh_rate", 0) / 1000.0, 2)
+            available.append(f"{mw}x{mh}@{mr:.2f}Hz")
+
+        # Logical info (position, scale, transform) — null if disabled
+        logical = data.get("logical")
+        if logical is not None:
+            enabled = True
+            raw_x = logical.get("x", 0)
+            raw_y = logical.get("y", 0)
+            scale = logical.get("scale", 1.0)
+            transform_str = logical.get("transform", "Normal")
+            transform_val = cls._NIRI_TRANSFORMS_INV.get(transform_str, 0)
+            pos_mode = PositionMode.EXPLICIT
+        else:
+            enabled = False
+            raw_x = 0
+            raw_y = 0
+            scale = 1.0
+            transform_val = 0
+            pos_mode = PositionMode.AUTO
+
+        # VRR
+        vrr_enabled = data.get("vrr_enabled", False)
+        vrr_val = VRR.ON if vrr_enabled else VRR.OFF
+
+        return cls(
+            name=name,
+            description=description,
+            make=make,
+            model=model,
+            serial=serial,
+            width=width,
+            height=height,
+            refresh_rate=refresh_rate,
+            resolution_mode=ResolutionMode.EXPLICIT,
+            available_modes=available,
+            x=raw_x,
+            y=raw_y,
+            position_mode=pos_mode,
+            scale=scale,
+            scale_mode=ScaleMode.EXPLICIT,
+            transform=Transform(transform_val),
+            enabled=enabled,
+            vrr=vrr_val,
+        )
+
 
 # ── WorkspaceRule ────────────────────────────────────────────────────────
 
@@ -647,6 +783,18 @@ class Profile:
         ]
         if ws_lines:
             blocks.append("\n".join(ws_lines))
+        return "\n\n".join(blocks) + "\n"
+
+    def generate_niri_config(
+        self, use_description: bool = False,
+        niri_ids: dict[str, str] | None = None,
+    ) -> str:
+        """Generate the full monitors.kdl content for Niri."""
+        blocks: list[str] = ["// Generated by Monique — https://github.com/ToRvaLDz/monique"]
+        for m in self.monitors:
+            blocks.append(m.to_niri_block(
+                use_description=use_description, niri_ids=niri_ids,
+            ))
         return "\n\n".join(blocks) + "\n"
 
     def generate_xsetup_script(self) -> str:

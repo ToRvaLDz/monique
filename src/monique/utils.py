@@ -37,6 +37,11 @@ def is_hyprland_installed() -> bool:
     return shutil.which("Hyprland") is not None
 
 
+def is_niri_installed() -> bool:
+    """Return True if Niri is available on the system."""
+    return shutil.which("niri") is not None
+
+
 def sway_config_dir() -> Path:
     """Return the Sway config directory."""
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
@@ -47,6 +52,12 @@ def hyprland_config_dir() -> Path:
     """Return the Hyprland config directory."""
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "hypr"
+
+
+def niri_config_dir() -> Path:
+    """Return the Niri config directory."""
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "niri"
 
 
 def hyprland_runtime_dir() -> Path:

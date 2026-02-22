@@ -7,13 +7,21 @@ import logging
 import os
 import signal
 import threading
+import time
 from pathlib import Path
 
 from .hyprland import HyprlandIPC
+from .niri import NiriIPC
 from .sway import SwayIPC
 from .models import Profile, apply_clamshell, undo_clamshell
 from .profile_manager import ProfileManager
 from .utils import load_app_settings
+
+try:
+    import pyudev
+    HAS_PYUDEV = True
+except ImportError:
+    HAS_PYUDEV = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -22,17 +30,23 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 DEBOUNCE_MS = 500
+UDEV_SETTLE_S = 5  # Ignore udev events shortly after applying (config reload triggers DRM events)
+NIRI_DEBOUNCE_MS = 3000  # Niri temporarily drops outputs during rearrangement
+NIRI_SETTLE_S_DEFAULT = 15  # Default settle time; overridden by user setting
+NIRI_SETTLE_BASE = 10  # Extra base seconds added to settle (matches GUI confirm timeout)
 
 
-def _detect_backend() -> HyprlandIPC | SwayIPC | None:
+def _detect_backend() -> HyprlandIPC | NiriIPC | SwayIPC | None:
     """Auto-detect the running compositor.
 
-    First checks environment variables, then probes XDG_RUNTIME_DIR/hypr/
-    for Hyprland sockets (handles race condition at login when the env var
-    is not yet exported to the systemd user manager).
+    First checks environment variables, then probes XDG_RUNTIME_DIR
+    for compositor sockets (handles race condition at login when env vars
+    are not yet exported to the systemd user manager).
     """
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
         return HyprlandIPC()
+    if os.environ.get("NIRI_SOCKET"):
+        return NiriIPC()
     if os.environ.get("SWAYSOCK"):
         return SwayIPC()
 
@@ -48,6 +62,13 @@ def _detect_backend() -> HyprlandIPC | SwayIPC | None:
                 os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = child.name
                 log.info("Found Hyprland socket: %s", child.name)
                 return HyprlandIPC()
+
+    # Niri: look for $XDG_RUNTIME_DIR/niri.*.sock
+    for sock in xdg_path.glob("niri.*.sock"):
+        if sock.is_socket():
+            os.environ["NIRI_SOCKET"] = str(sock)
+            log.info("Found Niri socket: %s", sock.name)
+            return NiriIPC()
 
     # Sway: look for $XDG_RUNTIME_DIR/sway-ipc.*.sock
     for sock in xdg_path.glob("sway-ipc.*.sock"):
@@ -65,7 +86,12 @@ class MonitorDaemon:
     def __init__(self) -> None:
         self._profile_mgr = ProfileManager()
         self._debounce_handle: asyncio.TimerHandle | None = None
-        self._ipc: HyprlandIPC | SwayIPC | None = None
+        self._last_apply_time: float = 0.0
+        self._last_applied_profile: str | None = None
+        self._prev_applied_profile: str | None = None
+        self._last_applied_fingerprint: set[str] = set()
+        self._using_udev: bool = False
+        self._ipc: HyprlandIPC | NiriIPC | SwayIPC | None = None
         self._lid_closed: bool | None = None  # None = no lid / not monitored
         self._asyncio_loop: asyncio.AbstractEventLoop | None = None
 
@@ -82,7 +108,12 @@ class MonitorDaemon:
                     await asyncio.sleep(5)
                     continue
 
-                backend_name = "Hyprland" if isinstance(ipc, HyprlandIPC) else "Sway"
+                if isinstance(ipc, HyprlandIPC):
+                    backend_name = "Hyprland"
+                elif isinstance(ipc, NiriIPC):
+                    backend_name = "Niri"
+                else:
+                    backend_name = "Sway"
                 log.info("Detected %s compositor", backend_name)
                 await self._listen(ipc)
             except (ConnectionRefusedError, FileNotFoundError, ConnectionError) as e:
@@ -96,26 +127,85 @@ class MonitorDaemon:
                     self._debounce_handle.cancel()
                     self._debounce_handle = None
 
-    async def _listen(self, ipc: HyprlandIPC | SwayIPC) -> None:
+    async def _listen(self, ipc: HyprlandIPC | NiriIPC | SwayIPC) -> None:
         self._ipc = ipc
-        log.info("Connected to compositor event socket")
-        # Apply best profile on initial connection
-        await self._apply_best_profile(ipc)
-        async for event in ipc.connect_event_socket():
-            log.info("Monitor event: %s", event)
-            self._schedule_apply(ipc)
+        if isinstance(ipc, NiriIPC) and HAS_PYUDEV:
+            self._using_udev = True
+            log.info("Using udev DRM events for Niri hotplug detection")
+            await self._listen_udev(ipc)
+        else:
+            self._using_udev = False
+            log.info("Connected to compositor event socket")
+            await self._apply_best_profile(ipc, force=True)
+            async for event in ipc.connect_event_socket():
+                log.info("Monitor event: %s", event)
+                self._schedule_apply(ipc)
 
-    def _schedule_apply(self, ipc: HyprlandIPC | SwayIPC) -> None:
+    async def _listen_udev(self, ipc: NiriIPC) -> None:
+        """Listen for udev DRM events instead of compositor IPC."""
+        context = pyudev.Context()
+        monitor = pyudev.Monitor.from_netlink(context)
+        monitor.filter_by(subsystem='drm')
+        monitor.start()
+
+        loop = asyncio.get_event_loop()
+        queue: asyncio.Queue = asyncio.Queue()
+
+        def on_readable():
+            device = monitor.poll(timeout=0)
+            if device and device.action in ('change', 'add', 'remove'):
+                queue.put_nowait(device)
+
+        loop.add_reader(monitor.fileno(), on_readable)
+        try:
+            await self._apply_best_profile(ipc, force=True)
+            while True:
+                device = await queue.get()
+                log.info("udev DRM event: %s %s", device.action, device.device_path)
+                self._schedule_apply(ipc)
+        finally:
+            loop.remove_reader(monitor.fileno())
+
+    def _schedule_apply(self, ipc: HyprlandIPC | NiriIPC | SwayIPC) -> None:
         """Debounce monitor events before applying."""
         loop = asyncio.get_event_loop()
         if self._debounce_handle:
             self._debounce_handle.cancel()
+
+        if self._using_udev:
+            # udev mode: short settle to ignore DRM events from config reload
+            elapsed = time.monotonic() - self._last_apply_time
+            if elapsed < UDEV_SETTLE_S:
+                remaining = UDEV_SETTLE_S - elapsed
+                log.debug("udev settle: %.1fs remaining, deferring", remaining)
+                self._debounce_handle = loop.call_later(
+                    remaining,
+                    lambda: asyncio.ensure_future(self._apply_best_profile(ipc)),
+                )
+                return
+            debounce_ms = DEBOUNCE_MS
+        elif isinstance(ipc, NiriIPC):
+            # Fallback IPC: maintain settle time to avoid config-reload loops
+            settings = load_app_settings()
+            settle_s = NIRI_SETTLE_BASE + settings.get("niri_settle_time", NIRI_SETTLE_S_DEFAULT)
+            elapsed = time.monotonic() - self._last_apply_time
+            if elapsed < settle_s:
+                remaining = settle_s - elapsed
+                self._debounce_handle = loop.call_later(
+                    remaining,
+                    lambda: asyncio.ensure_future(self._apply_best_profile(ipc)),
+                )
+                return
+            debounce_ms = NIRI_DEBOUNCE_MS
+        else:
+            debounce_ms = DEBOUNCE_MS
+
         self._debounce_handle = loop.call_later(
-            DEBOUNCE_MS / 1000.0,
+            debounce_ms / 1000.0,
             lambda: asyncio.ensure_future(self._apply_best_profile(ipc)),
         )
 
-    async def _apply_best_profile(self, ipc: HyprlandIPC | SwayIPC) -> None:
+    async def _apply_best_profile(self, ipc: HyprlandIPC | NiriIPC | SwayIPC, *, force: bool = False) -> None:
         """Query current monitors, find best profile, and apply it."""
         try:
             monitors = ipc.get_monitors()
@@ -127,6 +217,23 @@ class MonitorDaemon:
 
             profile = self._profile_mgr.find_best_match(fingerprint, monitors)
             if profile:
+                # Skip if we just applied the same profile
+                if not force and profile.name == self._last_applied_profile:
+                    log.info("Profile %s already applied, skipping", profile.name)
+                    return
+
+                # Detect A→B→A loop (config reload changes fingerprint temporarily)
+                if not force and profile.name == self._prev_applied_profile:
+                    elapsed = time.monotonic() - self._last_apply_time
+                    if elapsed < 30:
+                        log.info(
+                            "Loop detected (%s → %s → %s), skipping",
+                            self._prev_applied_profile,
+                            self._last_applied_profile,
+                            profile.name,
+                        )
+                        return
+
                 # When clamshell is active, the daemon owns internal display
                 # control.  First ensure internal monitors are enabled
                 # (handles profiles saved with the old manual toggle), then
@@ -149,9 +256,13 @@ class MonitorDaemon:
                     profile, update_sddm=update_sddm,
                     update_greetd=update_greetd, use_description=use_desc,
                 )
+                self._last_apply_time = time.monotonic()
+                self._prev_applied_profile = self._last_applied_profile
+                self._last_applied_profile = profile.name
+                self._last_applied_fingerprint = set(fingerprint)
 
-                # Migrate orphaned workspaces
-                if settings.get("migrate_workspaces", True):
+                # Migrate orphaned workspaces (Niri handles this natively)
+                if not isinstance(ipc, NiriIPC) and settings.get("migrate_workspaces", True):
                     self._migrate_orphaned_workspaces(ipc, profile, ws_snapshot)
             elif clamshell and self._lid_closed is False:
                 # No saved profile, lid open → re-enable internal
@@ -163,6 +274,7 @@ class MonitorDaemon:
                     ipc.apply_profile(
                         temp, update_sddm=update_sddm, use_description=use_desc,
                     )
+                    self._last_apply_time = time.monotonic()
             else:
                 log.info("No matching profile found")
         except Exception as e:

@@ -14,6 +14,8 @@ from .utils import (
     hyprland_config_dir,
     is_sway_installed,
     sway_config_dir,
+    is_niri_installed,
+    niri_config_dir,
     is_sddm_running,
     is_greetd_running,
     write_xsetup,
@@ -167,6 +169,12 @@ class HyprlandIPC:
             sway_conf = sway_config_dir() / "monitors.conf"
             backup_file(sway_conf)
             write_text(sway_conf, profile.generate_sway_config(use_description=use_description))
+
+        # Also write Niri config if Niri is installed
+        if is_niri_installed():
+            niri_conf = niri_config_dir() / "monitors.kdl"
+            backup_file(niri_conf)
+            write_text(niri_conf, profile.generate_niri_config(use_description=use_description))
 
         # Write SDDM Xsetup script if enabled and SDDM is present
         if update_sddm and is_sddm_running():

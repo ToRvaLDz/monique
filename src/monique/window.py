@@ -13,9 +13,11 @@ from .workspace_panel import WorkspacePanel
 from .profile_manager import ProfileManager
 from .models import MonitorConfig, Profile, WorkspaceRule
 from .hyprland import HyprlandIPC
+from .niri import NiriIPC
 from .sway import SwayIPC
 from .utils import (
     hyprland_config_dir,
+    niri_config_dir,
     backup_file,
     restore_backup,
     is_sddm_running,
@@ -28,10 +30,12 @@ import os
 from pathlib import Path
 
 
-def _detect_ipc() -> HyprlandIPC | SwayIPC:
+def _detect_ipc() -> HyprlandIPC | NiriIPC | SwayIPC:
     """Auto-detect the running compositor and return the appropriate IPC client."""
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
         return HyprlandIPC()
+    if os.environ.get("NIRI_SOCKET"):
+        return NiriIPC()
     if os.environ.get("SWAYSOCK"):
         return SwayIPC()
 
@@ -44,6 +48,11 @@ def _detect_ipc() -> HyprlandIPC | SwayIPC:
             if child.is_dir() and (child / ".socket.sock").exists():
                 os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = child.name
                 return HyprlandIPC()
+
+    for sock in xdg.glob("niri.*.sock"):
+        if sock.is_socket():
+            os.environ["NIRI_SOCKET"] = str(sock)
+            return NiriIPC()
 
     for sock in xdg.glob("sway-ipc.*.sock"):
         if sock.is_socket():
@@ -151,6 +160,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._monitors: list[MonitorConfig] = []
         self._workspace_rules = []
         self._current_profile_name: str = ""
+        self._base_profile_name: str = ""  # profile before user edits (for revert)
         self._confirm_timer_id: int = 0
         self._inhibit_profile_switch: bool = False
         self._osd: MonitorOSD | None = None
@@ -160,7 +170,7 @@ class MainWindow(Adw.ApplicationWindow):
 
         self._build_ui()
         self._setup_actions()
-        self._load_current_state()
+        self._load_current_state(select_profile=True)
         self._start_lid_monitor()
         self.connect("close-request", self._on_close_request)
 
@@ -196,15 +206,16 @@ class MainWindow(Adw.ApplicationWindow):
         header.set_title_widget(Adw.WindowTitle(title="Monique", subtitle="Monitor Configuration"))
 
         # Apply button
-        btn_apply = Gtk.Button(label="Apply", tooltip_text="Apply configuration")
-        btn_apply.add_css_class("suggested-action")
-        btn_apply.connect("clicked", self._on_apply_clicked)
-        header.pack_end(btn_apply)
+        self._btn_apply = Gtk.Button(label="Apply", tooltip_text="Apply configuration")
+        self._btn_apply.add_css_class("suggested-action")
+        self._btn_apply.connect("clicked", self._on_apply_clicked)
+        header.pack_end(self._btn_apply)
 
-        # Workspace button
-        btn_ws = Gtk.Button(icon_name="view-grid-symbolic", tooltip_text="Workspace rules")
-        btn_ws.connect("clicked", self._on_workspaces_clicked)
-        header.pack_end(btn_ws)
+        # Workspace button (not applicable for Niri — dynamic per-monitor workspaces)
+        if not isinstance(self._ipc, NiriIPC):
+            btn_ws = Gtk.Button(icon_name="view-grid-symbolic", tooltip_text="Workspace rules")
+            btn_ws.connect("clicked", self._on_workspaces_clicked)
+            header.pack_end(btn_ws)
 
         # Detect monitors button
         btn_detect = Gtk.Button(icon_name="view-refresh-symbolic", tooltip_text="Detect monitors")
@@ -234,6 +245,12 @@ class MainWindow(Adw.ApplicationWindow):
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self._props = PropertiesPanel()
+        if isinstance(self._ipc, NiriIPC):
+            self._props.set_compositor("niri")
+        elif isinstance(self._ipc, SwayIPC):
+            self._props.set_compositor("sway")
+        else:
+            self._props.set_compositor("hyprland")
         self._props.connect("property-changed", self._on_property_changed)
         scroll.set_child(self._props)
         self._split.set_sidebar(scroll)
@@ -380,20 +397,21 @@ class MainWindow(Adw.ApplicationWindow):
             row_no_dm.add_css_class("dim-label")
             grp_dm.add(row_no_dm)
 
-        # ── Workspaces group ──
-        grp_ws = Adw.PreferencesGroup(
-            title="Workspaces",
-            description="Configure workspace behavior on monitor changes",
-        )
-        page.add(grp_ws)
+        # ── Workspaces group (Niri handles migration natively) ──
+        if not isinstance(self._ipc, NiriIPC):
+            grp_ws = Adw.PreferencesGroup(
+                title="Workspaces",
+                description="Configure workspace behavior on monitor changes",
+            )
+            page.add(grp_ws)
 
-        sw_migrate = Adw.SwitchRow(
-            title="Migrate workspaces on monitor removal",
-            subtitle="Move workspaces to primary monitor when their monitor is disabled",
-        )
-        sw_migrate.set_active(self._app_settings.get("migrate_workspaces", True))
-        sw_migrate.connect("notify::active", self._on_migrate_switch_changed)
-        grp_ws.add(sw_migrate)
+            sw_migrate = Adw.SwitchRow(
+                title="Migrate workspaces on monitor removal",
+                subtitle="Move workspaces to primary monitor when their monitor is disabled",
+            )
+            sw_migrate.set_active(self._app_settings.get("migrate_workspaces", True))
+            sw_migrate.connect("notify::active", self._on_migrate_switch_changed)
+            grp_ws.add(sw_migrate)
 
         # ── Clamshell Mode group ──
         grp_clam = Adw.PreferencesGroup(
@@ -562,6 +580,9 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _load_workspace_rules_from_conf(self) -> list[WorkspaceRule]:
         """Read workspace rules from the monitors.conf file we wrote."""
+        # Niri doesn't support Hyprland-style workspace rules
+        if isinstance(self._ipc, NiriIPC):
+            return []
         conf = hyprland_config_dir() / "monitors.conf"
         if not conf.exists():
             return []
@@ -572,11 +593,11 @@ class MainWindow(Adw.ApplicationWindow):
                 rules.append(rule)
         return rules
 
-    def _load_current_state(self) -> None:
-        """Query Hyprland for current monitor state."""
+    def _load_current_state(self, *, select_profile: bool = False) -> None:
+        """Query compositor for current monitor state."""
         try:
             self._monitors = self._ipc.get_monitors()
-            self._place_disabled_monitors()
+            self._place_disabled(self._monitors)
             self._workspace_rules = self._load_workspace_rules_from_conf()
             self._canvas.monitors = self._monitors
             if self._monitors:
@@ -589,15 +610,17 @@ class MainWindow(Adw.ApplicationWindow):
                 parts.append(f"{n_disabled} disabled")
             self._set_status(f"{len(self._monitors)} monitor(s) detected ({', '.join(parts)})")
             self._update_clamshell_indicators()
-            self._select_matching_profile()
+            if select_profile:
+                self._select_matching_profile()
         except Exception as e:
             self._set_status(f"Error: {e}")
             self._toast(f"Cannot connect to compositor: {e}")
 
-    def _place_disabled_monitors(self) -> None:
+    @staticmethod
+    def _place_disabled(monitors: list[MonitorConfig]) -> None:
         """Position disabled monitors below the active layout so they're visible."""
-        enabled = [m for m in self._monitors if m.enabled]
-        disabled = [m for m in self._monitors if not m.enabled]
+        enabled = [m for m in monitors if m.enabled]
+        disabled = [m for m in monitors if not m.enabled]
         if not disabled:
             return
 
@@ -631,7 +654,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _select_matching_profile(self) -> None:
         """If the current monitor layout matches a saved profile, select it."""
         current_fp = sorted(m.description for m in self._monitors if m.description)
-        match = self._profile_mgr.find_best_match(current_fp, self._monitors)
+        match = self._profile_mgr.find_best_match(current_fp, self._monitors, exact_config=True)
         if match is None:
             return
         model = self._profile_dropdown.get_model()
@@ -640,9 +663,27 @@ class MainWindow(Adw.ApplicationWindow):
                 self._inhibit_profile_switch = True
                 self._profile_dropdown.set_selected(i)
                 self._current_profile_name = match.name
+                self._base_profile_name = match.name
                 self._workspace_rules = match.workspace_rules
                 self._inhibit_profile_switch = False
                 break
+
+    def _select_profile_by_name(self, name: str) -> None:
+        """Select a profile in the dropdown by name, or (Current) if empty."""
+        model = self._profile_dropdown.get_model()
+        if not name:
+            self._inhibit_profile_switch = True
+            self._profile_dropdown.set_selected(0)
+            self._inhibit_profile_switch = False
+            self._base_profile_name = ""
+            return
+        for i in range(model.get_n_items()):
+            if model.get_string(i) == name:
+                self._inhibit_profile_switch = True
+                self._profile_dropdown.set_selected(i)
+                self._inhibit_profile_switch = False
+                self._base_profile_name = name
+                return
 
     # ── Profile Management ───────────────────────────────────────────
 
@@ -665,12 +706,15 @@ class MainWindow(Adw.ApplicationWindow):
         profile = self._profile_mgr.load(name)
         if profile:
             self._monitors = profile.monitors
+            self._place_disabled(self._monitors)
             self._workspace_rules = profile.workspace_rules
             self._current_profile_name = profile.name
+            self._base_profile_name = profile.name
             self._canvas.monitors = self._monitors
             if self._monitors:
                 self._canvas.selected_index = 0
                 self._update_properties_for_selected()
+            self._update_clamshell_indicators()
             self._set_status(f"Loaded profile: {name}")
 
     def _on_save_clicked(self, btn) -> None:
@@ -869,10 +913,18 @@ class MainWindow(Adw.ApplicationWindow):
             workspace_rules=list(self._workspace_rules),
         )
 
-        conf_dir = hyprland_config_dir()
-        monitors_conf = conf_dir / "monitors.conf"
+        # Determine config path based on compositor
+        if isinstance(self._ipc, NiriIPC):
+            monitors_conf = niri_config_dir() / "monitors.kdl"
+        else:
+            monitors_conf = hyprland_config_dir() / "monitors.conf"
 
-        # Snapshot workspaces before applying
+        # Snapshot actual compositor state before applying (for revert)
+        pre_monitors = self._ipc.get_monitors()
+        self._place_disabled(pre_monitors)
+        self._pre_apply_monitors = pre_monitors
+        self._pre_apply_profile_name = self._base_profile_name
+        self._pre_apply_workspace_rules = list(self._workspace_rules)
         self._ws_snapshot = self._ipc.get_workspaces()
         self._migrated_workspaces: list[tuple[str, str]] = []
 
@@ -893,8 +945,8 @@ class MainWindow(Adw.ApplicationWindow):
             restore_backup(monitors_conf)
             return
 
-        # Migrate orphaned workspaces if setting is on
-        if self._app_settings.get("migrate_workspaces", True):
+        # Migrate orphaned workspaces if setting is on (Niri handles this natively)
+        if not isinstance(self._ipc, NiriIPC) and self._app_settings.get("migrate_workspaces", True):
             self._migrate_orphaned_workspaces(profile)
 
         # Show confirmation dialog with countdown
@@ -961,6 +1013,7 @@ class MainWindow(Adw.ApplicationWindow):
             if bak.exists():
                 bak.unlink()
             self._migrated_workspaces = []
+            self._base_profile_name = self._current_profile_name
             self._toast("Settings kept")
         else:
             self._do_revert()
@@ -977,10 +1030,22 @@ class MainWindow(Adw.ApplicationWindow):
         if restore_backup(self._confirm_conf_path):
             try:
                 self._ipc.reload()
-                self._load_current_state()
-                self._toast("Settings reverted")
             except Exception as e:
                 self._toast(f"Revert reload failed: {e}")
+                return
+
+            # Restore pre-apply GUI state directly (no need to re-query compositor)
+            self._monitors = self._pre_apply_monitors
+            self._current_profile_name = self._pre_apply_profile_name
+            self._workspace_rules = self._pre_apply_workspace_rules
+            self._canvas.monitors = self._monitors
+            if self._monitors:
+                self._canvas.selected_index = 0
+                self._update_properties_for_selected()
+            self._update_clamshell_indicators()
+            # Select the pre-apply profile in dropdown by name
+            self._select_profile_by_name(self._pre_apply_profile_name)
+            self._toast("Settings reverted")
         else:
             self._toast("No backup to revert")
 

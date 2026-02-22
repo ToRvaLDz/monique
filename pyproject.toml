@@ -13,6 +13,9 @@ dependencies = [
     "PyGObject>=3.46",
 ]
 
+[project.optional-dependencies]
+udev = ["pyudev>=0.24"]
+
 [project.scripts]
 monique = "monique.app:main"
 moniqued = "monique.daemon:main"
