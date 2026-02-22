@@ -395,36 +395,76 @@ class MonitorCanvas(Gtk.DrawingArea):
     def _draw_monitor_text(self, cr, m: MonitorConfig, sx: float, sy: float, sw: float, sh: float) -> None:
         # Clip text to monitor rectangle
         cr.save()
-        padding = 4
+        padding = 6
         cr.rectangle(sx + padding, sy + padding, sw - padding * 2, sh - padding * 2)
         cr.clip()
-
-        cr.set_source_rgb(*COLOR_TEXT)
 
         # Name — show description when enabled, fall back to port name
         name = (m.description if self._use_description and m.description else m.name) or "?"
         font_size = min(14, max(8, sw / 10))
         cr.set_font_size(font_size)
 
-        extents = cr.text_extents(name)
-        tx = sx + (sw - extents.width) / 2
-        ty = sy + sh / 2 - 2
-        cr.move_to(tx, ty)
-        cr.show_text(name)
+        max_text_w = sw - padding * 2
+        name_lines = self._wrap_text(cr, name, max_text_w, max_lines=4)
+        line_height = font_size * 1.3
 
-        # Resolution
-        cr.set_source_rgb(*COLOR_TEXT_DIM)
+        # Resolution line
         res_text = f"{m.width}x{m.height}"
         font_size_small = min(10, max(6, sw / 14))
+
+        # Vertical centering: name block + gap + resolution
+        gap = 4
+        name_block_h = len(name_lines) * line_height
+        total_h = name_block_h + gap + font_size_small
+        base_y = sy + (sh - total_h) / 2 + font_size
+
+        # Draw name lines (centered)
+        cr.set_source_rgb(*COLOR_TEXT)
+        cr.set_font_size(font_size)
+        for i, line in enumerate(name_lines):
+            extents = cr.text_extents(line)
+            tx = sx + (sw - extents.width) / 2
+            ty = base_y + i * line_height
+            cr.move_to(tx, ty)
+            cr.show_text(line)
+
+        # Resolution (centered, below name)
+        cr.set_source_rgb(*COLOR_TEXT_DIM)
         cr.set_font_size(font_size_small)
         extents = cr.text_extents(res_text)
         tx = sx + (sw - extents.width) / 2
-        ty = sy + sh / 2 + font_size_small + 4
-        if ty + 4 < sy + sh:
+        ty = base_y + len(name_lines) * line_height + gap
+        if ty + padding < sy + sh:
             cr.move_to(tx, ty)
             cr.show_text(res_text)
 
         cr.restore()
+
+    @staticmethod
+    def _wrap_text(cr, text: str, max_width: float, max_lines: int = 4) -> list[str]:
+        """Word-wrap *text* into lines that fit within *max_width* pixels."""
+        words = text.split()
+        if not words:
+            return [text]
+
+        lines: list[str] = []
+        current = words[0]
+
+        for word in words[1:]:
+            test = current + " " + word
+            if cr.text_extents(test).width <= max_width:
+                current = test
+            else:
+                lines.append(current)
+                current = word
+                if len(lines) >= max_lines:
+                    current = ""
+                    break
+
+        if current:
+            lines.append(current)
+
+        return lines or [text]
 
 
 def _rounded_rect(cr, x: float, y: float, w: float, h: float, r: float) -> None:
