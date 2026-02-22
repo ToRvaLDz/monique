@@ -123,7 +123,7 @@ class MonitorDaemon:
             settings = load_app_settings()
             clamshell = settings.get("clamshell_mode", False)
 
-            profile = self._profile_mgr.find_best_match(fingerprint)
+            profile = self._profile_mgr.find_best_match(fingerprint, monitors)
             if profile:
                 # Apply clamshell mode if enabled and lid is closed
                 if clamshell and self._lid_closed is not False:

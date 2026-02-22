@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .models import Profile
+from .models import MonitorConfig, Profile
 from .utils import profiles_dir, read_json, write_json
 
 
@@ -57,26 +57,27 @@ class ProfileManager:
                 profiles.append(Profile.from_dict(data))
         return profiles
 
-    def find_best_match(self, current_fingerprint: list[str]) -> Profile | None:
+    def find_best_match(
+        self,
+        current_fingerprint: list[str],
+        current_monitors: list[MonitorConfig] | None = None,
+    ) -> Profile | None:
         """Find the best matching profile for the given monitor fingerprint.
 
-        Uses exact match first, then Jaccard similarity >= 0.5 as fallback.
+        Uses Jaccard similarity on descriptions (>= 0.5), then breaks ties
+        by comparing the enabled/disabled state of each monitor against the
+        current compositor state.
         """
         if not current_fingerprint:
             return None
 
         current_set = set(current_fingerprint)
-        best_profile: Profile | None = None
-        best_score = 0.0
+        candidates: list[tuple[float, int, Profile]] = []
 
         for profile in self.list_all():
             fp = profile.fingerprint
             if not fp:
                 continue
-
-            # Exact match
-            if fp == current_fingerprint:
-                return profile
 
             # Jaccard similarity
             profile_set = set(fp)
@@ -85,10 +86,23 @@ class ProfileManager:
             if union == 0:
                 continue
             score = intersection / union
-            if score > best_score:
-                best_score = score
-                best_profile = profile
+            if score < 0.5:
+                continue
 
-        if best_score >= 0.5:
-            return best_profile
-        return None
+            # Count matching enabled states as tiebreaker
+            enabled_matches = 0
+            if current_monitors:
+                current_state = {m.description: m.enabled for m in current_monitors}
+                for m in profile.monitors:
+                    if m.description in current_state:
+                        if m.enabled == current_state[m.description]:
+                            enabled_matches += 1
+
+            candidates.append((score, enabled_matches, profile))
+
+        if not candidates:
+            return None
+
+        # Best Jaccard first, then most enabled-state matches
+        candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
+        return candidates[0][2]

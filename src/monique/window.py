@@ -549,7 +549,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _select_matching_profile(self) -> None:
         """If the current monitor layout matches a saved profile, select it."""
         current_fp = sorted(m.description for m in self._monitors if m.description)
-        match = self._profile_mgr.find_best_match(current_fp)
+        match = self._profile_mgr.find_best_match(current_fp, self._monitors)
         if match is None:
             return
         model = self._profile_dropdown.get_model()
