@@ -25,6 +25,7 @@ COLOR_MONITOR_BORDER = (0.4, 0.42, 0.46)
 COLOR_SELECTED = (0.26, 0.52, 0.96)
 COLOR_SELECTED_FILL = (0.20, 0.35, 0.55)
 COLOR_DISABLED = (0.5, 0.2, 0.2)
+COLOR_CLAMSHELL = (0.55, 0.45, 0.15)
 COLOR_TEXT = (0.9, 0.9, 0.92)
 COLOR_TEXT_DIM = (0.6, 0.62, 0.64)
 
@@ -44,6 +45,7 @@ class MonitorCanvas(Gtk.DrawingArea):
         super().__init__()
         self._monitors: list[MonitorConfig] = []
         self._use_description: bool = True
+        self._clamshell_indices: set[int] = set()
         self._selected: int = -1
         self._zoom: float = 0.15
         self._pan_x: float = 0.0
@@ -127,6 +129,12 @@ class MonitorCanvas(Gtk.DrawingArea):
         """Toggle between showing monitor descriptions vs port names."""
         self._use_description = val
         self.queue_draw()
+
+    def set_clamshell_indices(self, indices: set[int]) -> None:
+        """Mark monitor indices as clamshell-managed (drawn in amber)."""
+        if indices != self._clamshell_indices:
+            self._clamshell_indices = indices
+            self.queue_draw()
 
     def _auto_fit(self) -> None:
         """Auto-fit zoom and pan to show all monitors."""
@@ -317,7 +325,7 @@ class MonitorCanvas(Gtk.DrawingArea):
 
         # Monitors
         for i, m in enumerate(self._monitors):
-            self._draw_monitor(cr, m, i == self._selected)
+            self._draw_monitor(cr, m, i == self._selected, i in self._clamshell_indices)
 
     def _draw_grid(self, cr, width: int, height: int) -> None:
         cr.set_source_rgb(*COLOR_GRID)
@@ -351,13 +359,15 @@ class MonitorCanvas(Gtk.DrawingArea):
 
         cr.stroke()
 
-    def _draw_monitor(self, cr, m: MonitorConfig, selected: bool) -> None:
+    def _draw_monitor(self, cr, m: MonitorConfig, selected: bool, clamshell: bool = False) -> None:
         sx, sy = self._logical_to_screen(m.x, m.y)
         sw = m.logical_width * self._zoom
         sh = m.logical_height * self._zoom
 
         # Fill
-        if not m.enabled:
+        if clamshell:
+            cr.set_source_rgb(*COLOR_CLAMSHELL)
+        elif not m.enabled:
             cr.set_source_rgb(*COLOR_DISABLED)
         elif selected:
             cr.set_source_rgb(*COLOR_SELECTED_FILL)

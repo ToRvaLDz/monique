@@ -155,11 +155,13 @@ class MainWindow(Adw.ApplicationWindow):
         self._inhibit_profile_switch: bool = False
         self._osd: MonitorOSD | None = None
         self._dirty: bool = False
+        self._lid_closed: bool = False
         self._app_settings = load_app_settings()
 
         self._build_ui()
         self._setup_actions()
         self._load_current_state()
+        self._start_lid_monitor()
         self.connect("close-request", self._on_close_request)
 
     # ── UI Construction ──────────────────────────────────────────────
@@ -477,6 +479,85 @@ class MainWindow(Adw.ApplicationWindow):
         )
         about.present(self)
 
+    # ── Lid monitoring ─────────────────────────────────────────────────
+
+    def _start_lid_monitor(self) -> None:
+        """Monitor lid state via UPower D-Bus to update clamshell indicators."""
+        try:
+            self._dbus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+            result = self._dbus.call_sync(
+                "org.freedesktop.UPower",
+                "/org/freedesktop/UPower",
+                "org.freedesktop.DBus.Properties",
+                "Get",
+                GLib.Variant("(ss)", ("org.freedesktop.UPower", "LidIsPresent")),
+                GLib.VariantType("(v)"),
+                Gio.DBusCallFlags.NONE, -1, None,
+            )
+            if not result.get_child_value(0).get_variant().get_boolean():
+                return
+
+            result = self._dbus.call_sync(
+                "org.freedesktop.UPower",
+                "/org/freedesktop/UPower",
+                "org.freedesktop.DBus.Properties",
+                "Get",
+                GLib.Variant("(ss)", ("org.freedesktop.UPower", "LidIsClosed")),
+                GLib.VariantType("(v)"),
+                Gio.DBusCallFlags.NONE, -1, None,
+            )
+            self._lid_closed = result.get_child_value(0).get_variant().get_boolean()
+            self._update_clamshell_indicators()
+
+            def _on_signal(_conn, _sender, _path, _iface, _signal, params, _ud):
+                iface_name = params.get_child_value(0).get_string()
+                if iface_name != "org.freedesktop.UPower":
+                    return
+                changed = params.get_child_value(1)
+                lid_val = changed.lookup_value("LidIsClosed", GLib.VariantType("b"))
+                if lid_val is None:
+                    return
+                self._lid_closed = lid_val.get_boolean()
+                GLib.idle_add(self._on_lid_changed)
+
+            self._dbus.signal_subscribe(
+                "org.freedesktop.UPower",
+                "org.freedesktop.DBus.Properties",
+                "PropertiesChanged",
+                "/org/freedesktop/UPower",
+                None, Gio.DBusSignalFlags.NONE, _on_signal, None,
+            )
+        except Exception:
+            pass
+
+    def _on_lid_changed(self) -> bool:
+        """Called on the main thread when lid state changes."""
+        self._update_clamshell_indicators()
+        # Reload monitors from compositor to reflect daemon changes
+        GLib.timeout_add(1000, self._deferred_reload)
+        return False
+
+    def _deferred_reload(self) -> bool:
+        """Reload monitor state after daemon has had time to apply."""
+        self._load_current_state()
+        return False
+
+    def _update_clamshell_indicators(self) -> None:
+        """Update canvas to highlight clamshell-managed monitors."""
+        clamshell = self._app_settings.get("clamshell_mode", False)
+        if clamshell and self._lid_closed:
+            indices = {
+                i for i, m in enumerate(self._monitors) if m.is_internal
+            }
+        else:
+            indices = set()
+        self._canvas.set_clamshell_indices(indices)
+        # Update properties panel lock state
+        idx = self._canvas.selected_index
+        if 0 <= idx < len(self._monitors):
+            m = self._monitors[idx]
+            self._props.set_enabled_locked(clamshell and m.is_internal)
+
     # ── Data Loading ─────────────────────────────────────────────────
 
     def _load_workspace_rules_from_conf(self) -> list[WorkspaceRule]:
@@ -507,6 +588,7 @@ class MainWindow(Adw.ApplicationWindow):
             if n_disabled:
                 parts.append(f"{n_disabled} disabled")
             self._set_status(f"{len(self._monitors)} monitor(s) detected ({', '.join(parts)})")
+            self._update_clamshell_indicators()
             self._select_matching_profile()
         except Exception as e:
             self._set_status(f"Error: {e}")
