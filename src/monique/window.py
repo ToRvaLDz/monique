@@ -13,6 +13,7 @@ from .workspace_panel import WorkspacePanel
 from .profile_manager import ProfileManager
 from .models import MonitorConfig, Profile, WorkspaceRule, apply_clamshell, undo_clamshell
 from .hyprland import HyprlandIPC
+from .sway import SwayIPC
 from .utils import (
     hyprland_config_dir,
     backup_file,
@@ -22,6 +23,35 @@ from .utils import (
     load_app_settings,
     save_app_settings,
 )
+
+import os
+from pathlib import Path
+
+
+def _detect_ipc() -> HyprlandIPC | SwayIPC:
+    """Auto-detect the running compositor and return the appropriate IPC client."""
+    if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return HyprlandIPC()
+    if os.environ.get("SWAYSOCK"):
+        return SwayIPC()
+
+    # Fallback: scan for compositor sockets in XDG_RUNTIME_DIR
+    xdg = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+
+    hypr_dir = xdg / "hypr"
+    if hypr_dir.is_dir():
+        for child in hypr_dir.iterdir():
+            if child.is_dir() and (child / ".socket.sock").exists():
+                os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = child.name
+                return HyprlandIPC()
+
+    for sock in xdg.glob("sway-ipc.*.sock"):
+        if sock.is_socket():
+            os.environ["SWAYSOCK"] = str(sock)
+            return SwayIPC()
+
+    # Default fallback
+    return HyprlandIPC()
 
 
 CONFIRM_TIMEOUT = 10  # seconds
@@ -116,7 +146,7 @@ class MainWindow(Adw.ApplicationWindow):
 
     def __init__(self, app: Adw.Application) -> None:
         super().__init__(application=app, title="Monique", default_width=1100, default_height=700)
-        self._ipc = HyprlandIPC()
+        self._ipc = _detect_ipc()
         self._profile_mgr = ProfileManager()
         self._monitors: list[MonitorConfig] = []
         self._workspace_rules = []
@@ -532,7 +562,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._select_matching_profile()
         except Exception as e:
             self._set_status(f"Error: {e}")
-            self._toast(f"Cannot connect to Hyprland: {e}")
+            self._toast(f"Cannot connect to compositor: {e}")
 
     def _place_disabled_monitors(self) -> None:
         """Position disabled monitors below the active layout so they're visible."""

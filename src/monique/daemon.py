@@ -7,6 +7,7 @@ import logging
 import os
 import signal
 import threading
+from pathlib import Path
 
 from .hyprland import HyprlandIPC
 from .sway import SwayIPC
@@ -24,11 +25,37 @@ DEBOUNCE_MS = 500
 
 
 def _detect_backend() -> HyprlandIPC | SwayIPC | None:
-    """Auto-detect the running compositor from environment variables."""
+    """Auto-detect the running compositor.
+
+    First checks environment variables, then probes XDG_RUNTIME_DIR/hypr/
+    for Hyprland sockets (handles race condition at login when the env var
+    is not yet exported to the systemd user manager).
+    """
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
         return HyprlandIPC()
     if os.environ.get("SWAYSOCK"):
         return SwayIPC()
+
+    # Fallback: scan for compositor sockets in XDG_RUNTIME_DIR
+    xdg = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
+    xdg_path = Path(xdg)
+
+    # Hyprland: look for $XDG_RUNTIME_DIR/hypr/<signature>/.socket.sock
+    hypr_dir = xdg_path / "hypr"
+    if hypr_dir.is_dir():
+        for child in hypr_dir.iterdir():
+            if child.is_dir() and (child / ".socket.sock").exists():
+                os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = child.name
+                log.info("Found Hyprland socket: %s", child.name)
+                return HyprlandIPC()
+
+    # Sway: look for $XDG_RUNTIME_DIR/sway-ipc.*.sock
+    for sock in xdg_path.glob("sway-ipc.*.sock"):
+        if sock.is_socket():
+            os.environ["SWAYSOCK"] = str(sock)
+            log.info("Found Sway socket: %s", sock.name)
+            return SwayIPC()
+
     return None
 
 
