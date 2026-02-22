@@ -150,13 +150,17 @@ class SwayIPC:
             _, ack_len, _ = struct.unpack(_HEADER_FMT, ack_header)
             await _arecv_exactly(reader, ack_len)
 
-            # Yield only output events
+            # Yield only hotplug output events (new/del),
+            # skip 'unspecified' to avoid infinite loop when we apply config
             while True:
                 evt_header = await _arecv_exactly(reader, _HEADER_SIZE)
                 _, evt_len, evt_type = struct.unpack(_HEADER_FMT, evt_header)
                 evt_payload = await _arecv_exactly(reader, evt_len)
 
                 if evt_type == EVENT_OUTPUT:
-                    yield json.loads(evt_payload.decode())
+                    event = json.loads(evt_payload.decode())
+                    change = event.get("change", "")
+                    if change in ("new", "del"):
+                        yield event
         finally:
             writer.close()

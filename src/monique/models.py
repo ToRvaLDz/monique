@@ -156,7 +156,9 @@ class MonitorConfig:
         7: ("right", "x"),
     }
 
-    # Mapping from Transform enum to Sway transform strings
+    # Mapping from Transform enum (CCW, Wayland protocol) to Sway config
+    # Sway transform strings match WL_OUTPUT_TRANSFORM enum values:
+    # both Hyprland and Sway use the same Wayland protocol convention.
     _SWAY_TRANSFORMS: ClassVar[dict[int, str]] = {
         0: "normal",
         1: "90",
