@@ -99,6 +99,8 @@ class MonitorDaemon:
     async def _listen(self, ipc: HyprlandIPC | SwayIPC) -> None:
         self._ipc = ipc
         log.info("Connected to compositor event socket")
+        # Apply best profile on initial connection
+        await self._apply_best_profile(ipc)
         async for event in ipc.connect_event_socket():
             log.info("Monitor event: %s", event)
             self._schedule_apply(ipc)
