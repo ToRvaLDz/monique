@@ -7,7 +7,7 @@
 <p align="center">
   <b>MON</b>itor <b>I</b>ntegrated <b>QU</b>ick <b>E</b>ditor
   <br>
-  Graphical monitor configurator for <b>Hyprland</b> and <b>Sway</b>
+  Graphical monitor configurator for <b>Hyprland</b>, <b>Sway</b> and <b>Niri</b>
 </p>
 
 <p align="center">
@@ -25,6 +25,7 @@
   <br>
   <img alt="Hyprland" src="https://img.shields.io/badge/Hyprland-%2358e1ff?logo=hyprland&logoColor=white">
   <img alt="Sway" src="https://img.shields.io/badge/Sway-%2368751a?logo=sway&logoColor=white">
+  <img alt="Niri" src="https://img.shields.io/badge/Niri-%23c77dff">
   <img alt="Wayland" src="https://img.shields.io/badge/Wayland-%23ffbc00?logo=wayland&logoColor=black">
 </p>
 
@@ -58,11 +59,11 @@
 ## Features
 
 - **Drag-and-drop layout** — arrange monitors visually on an interactive canvas
-- **Multi-backend** — auto-detects Hyprland or Sway from the environment
+- **Multi-backend** — auto-detects Hyprland, Sway, or Niri from the environment
 - **Profile system** — save, load, and switch between monitor configurations
 - **Hotplug daemon** (`moniqued`) — automatically applies the best matching profile when monitors are connected or disconnected
 - **Display manager integration** — syncs your layout to the login screen for SDDM (xrandr) and greetd (sway), with polkit rule for passwordless writes
-- **Workspace rules** — configure workspace-to-monitor assignments
+- **Workspace rules** — configure workspace-to-monitor assignments (Hyprland/Sway)
 - **Live preview** — OSD overlay to identify monitors (double-click)
 - **Workspace migration** — automatically moves workspaces to the primary monitor when their monitor is disabled or unplugged (reverted if you click "Revert")
 - **Clamshell mode** — disable the internal laptop display when external monitors are connected (manual toggle in the toolbar or automatic via daemon preferences); the daemon also monitors the lid state via UPower D-Bus
@@ -99,6 +100,7 @@ pip install .
 ```
 
 **Runtime dependencies:** `python`, `python-gobject`, `gtk4`, `libadwaita`
+**Optional:** `python-pyudev` (hardware hotplug detection for Niri)
 
 ## Usage
 
@@ -122,7 +124,7 @@ Or enable the systemd user service:
 systemctl --user enable --now moniqued
 ```
 
-The daemon auto-detects the active compositor and listens for monitor hotplug events. When a monitor is connected or disconnected, it waits 500ms (debounce) then applies the best matching profile. Orphaned workspaces are automatically migrated to the primary monitor (configurable via **Preferences > Migrate workspaces**).
+The daemon auto-detects the active compositor and listens for monitor hotplug events. When a monitor is connected or disconnected, it waits 500ms (debounce) then applies the best matching profile. On Niri, the daemon uses udev DRM events (via `pyudev`) for reliable hardware hotplug detection. Orphaned workspaces are automatically migrated to the primary monitor on Hyprland/Sway (configurable via **Preferences > Migrate workspaces**).
 
 #### Clamshell mode
 
@@ -138,6 +140,7 @@ The daemon also monitors the laptop lid state via UPower D-Bus: closing the lid 
 |---|---|---|
 | Hyprland | `$HYPRLAND_INSTANCE_SIGNATURE` | `monitoradded` / `monitorremoved` via socket2 |
 | Sway | `$SWAYSOCK` | `output` events via i3-ipc subscribe |
+| Niri | `$NIRI_SOCKET` | udev DRM subsystem (with `pyudev`), IPC fallback |
 | Neither | Warning, retry every 5s | — |
 
 ## Display manager integration
@@ -173,6 +176,7 @@ All configuration is stored in `~/.config/monique/`:
 Monitor config files are written to the compositor's config directory:
 - **Hyprland:** `~/.config/hypr/monitors.conf`
 - **Sway:** `~/.config/sway/monitors.conf`
+- **Niri:** `~/.config/niri/monitors.kdl`
 
 ## Project structure
 
@@ -186,6 +190,7 @@ src/monique/
 ├── models.py            # MonitorConfig, Profile, WorkspaceRule
 ├── hyprland.py          # Hyprland IPC client
 ├── sway.py              # Sway IPC client (binary i3-ipc)
+├── niri.py              # Niri IPC client (JSON socket)
 ├── daemon.py            # Hotplug daemon (moniqued)
 ├── profile_manager.py   # Profile save/load/match
 └── utils.py             # Paths, file I/O, helpers
