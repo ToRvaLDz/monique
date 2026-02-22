@@ -121,6 +121,12 @@ class MonitorConfig:
     # Enabled
     enabled: bool = True
 
+    def __post_init__(self) -> None:
+        # Hyprland appends "Unknown" for missing serials, Sway omits it.
+        # Normalize so fingerprints match across compositors and saved profiles.
+        if self.description.endswith(" Unknown"):
+            self.description = self.description[:-8]
+
     @property
     def logical_width(self) -> float:
         """Width in logical pixels (accounting for scale and rotation)."""
