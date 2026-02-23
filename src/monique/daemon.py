@@ -34,6 +34,9 @@ UDEV_SETTLE_S = 5  # Ignore udev events shortly after applying (config reload tr
 NIRI_DEBOUNCE_MS = 3000  # Niri temporarily drops outputs during rearrangement
 NIRI_SETTLE_S_DEFAULT = 15  # Default settle time; overridden by user setting
 NIRI_SETTLE_BASE = 10  # Extra base seconds added to settle (matches GUI confirm timeout)
+LID_CLOSE_SETTLE_S = 0.3   # Delay after lid close before disabling internal display
+LID_OPEN_SETTLE_S = 0.5    # Delay after lid open before re-enabling internal display
+LID_OPEN_RETRY_S = 2.0     # Retry re-enable once more (panel can appear late in DRM)
 
 
 def _detect_backend() -> HyprlandIPC | NiriIPC | SwayIPC | None:
@@ -93,6 +96,8 @@ class MonitorDaemon:
         self._using_udev: bool = False
         self._ipc: HyprlandIPC | NiriIPC | SwayIPC | None = None
         self._lid_closed: bool | None = None  # None = no lid / not monitored
+        self._lid_change_handle: asyncio.TimerHandle | None = None
+        self._lid_open_snapshot: list | None = None  # monitor state before lid-close (for restore)
         self._asyncio_loop: asyncio.AbstractEventLoop | None = None
 
     async def run(self) -> None:
@@ -126,6 +131,9 @@ class MonitorDaemon:
                 if self._debounce_handle:
                     self._debounce_handle.cancel()
                     self._debounce_handle = None
+                if self._lid_change_handle:
+                    self._lid_change_handle.cancel()
+                    self._lid_change_handle = None
 
     async def _listen(self, ipc: HyprlandIPC | NiriIPC | SwayIPC) -> None:
         self._ipc = ipc
@@ -280,10 +288,79 @@ class MonitorDaemon:
         except Exception as e:
             log.error("Failed to apply profile: %s", e)
 
+    # ── Lid-driven clamshell ────────────────────────────────────────
+
+    def _on_lid_changed(self, closed: bool) -> None:
+        """Schedule a lid-driven apply after the appropriate settle delay.
+
+        Uses its own timer (_lid_change_handle) so it never cancels
+        pending hotplug debounce timers and vice-versa.
+        """
+        if self._lid_change_handle:
+            self._lid_change_handle.cancel()
+            self._lid_change_handle = None
+
+        if not self._ipc:
+            return
+
+        delay = LID_CLOSE_SETTLE_S if closed else LID_OPEN_SETTLE_S
+        log.info("Lid %s: scheduling clamshell apply in %.1fs", "closed" if closed else "opened", delay)
+        loop = asyncio.get_event_loop()
+        self._lid_change_handle = loop.call_later(
+            delay,
+            lambda: asyncio.ensure_future(self._apply_lid_change(closed)),
+        )
+
+    async def _apply_lid_change(self, closed: bool, *, retry: bool = False) -> None:
+        """Toggle internal display on lid open/close, separate from hotplug path."""
+        settings = load_app_settings()
+        if not settings.get("clamshell_mode", False) or not self._ipc:
+            return
+        ipc = self._ipc
+
+        try:
+            monitors = ipc.get_monitors()
+
+            # Resolve a profile: saved > snapshot > live
+            profile = None
+            if self._last_applied_profile:
+                profile = self._profile_mgr.load(self._last_applied_profile)
+                if profile:
+                    profile = Profile.from_dict(profile.to_dict())
+            if not profile and not closed and self._lid_open_snapshot:
+                from .models import MonitorConfig
+                profile = Profile(name="clamshell-lid",
+                                  monitors=[MonitorConfig.from_dict(d) for d in self._lid_open_snapshot])
+            if not profile:
+                profile = Profile(name="clamshell-lid", monitors=list(monitors))
+
+            if closed:
+                if not any(not m.is_internal for m in monitors):
+                    log.info("Clamshell: no external monitor, skipping")
+                    return
+                self._lid_open_snapshot = [m.to_dict() for m in monitors]
+                if not apply_clamshell(profile.monitors):
+                    return
+                log.info("Clamshell: lid closed, disabling internal display(s)")
+            else:
+                undo_clamshell(profile.monitors)
+                log.info("Clamshell: lid opened, re-enabling internal display(s)%s", " (retry)" if retry else "")
+
+            use_desc = not settings.get("use_port_names", False)
+            ipc.apply_profile(profile, update_sddm=settings.get("update_sddm", True),
+                              update_greetd=settings.get("update_greetd", True), use_description=use_desc)
+            self._last_apply_time = time.monotonic()
+
+            if not closed and not retry:
+                asyncio.get_event_loop().call_later(
+                    LID_OPEN_RETRY_S, lambda: asyncio.ensure_future(self._apply_lid_change(False, retry=True)))
+        except Exception as e:
+            log.error("Clamshell lid change failed: %s", e)
+
     # ── Lid monitoring via UPower D-Bus ─────────────────────────────
 
     def _start_lid_monitor(self) -> None:
-        """Start monitoring lid state via UPower D-Bus in a background thread."""
+        """Monitor lid state via UPower D-Bus in a background thread."""
         try:
             import gi
             gi.require_version("Gio", "2.0")
@@ -295,74 +372,41 @@ class MonitorDaemon:
         def _run() -> None:
             try:
                 bus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
+                props = ("org.freedesktop.UPower", "/org/freedesktop/UPower",
+                         "org.freedesktop.DBus.Properties", "Get")
 
-                # Check if lid is present
-                result = bus.call_sync(
-                    "org.freedesktop.UPower",
-                    "/org/freedesktop/UPower",
-                    "org.freedesktop.DBus.Properties",
-                    "Get",
-                    GLib.Variant("(ss)", ("org.freedesktop.UPower", "LidIsPresent")),
-                    GLib.VariantType("(v)"),
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
-                lid_present = result.get_child_value(0).get_variant().get_boolean()
-                if not lid_present:
+                def _get(prop: str) -> bool:
+                    r = bus.call_sync(*props, GLib.Variant("(ss)", ("org.freedesktop.UPower", prop)),
+                                     GLib.VariantType("(v)"), Gio.DBusCallFlags.NONE, -1, None)
+                    return r.get_child_value(0).get_variant().get_boolean()
+
+                if not _get("LidIsPresent"):
                     log.info("No lid detected, lid monitoring disabled")
                     return
 
-                # Get initial lid state
-                result = bus.call_sync(
-                    "org.freedesktop.UPower",
-                    "/org/freedesktop/UPower",
-                    "org.freedesktop.DBus.Properties",
-                    "Get",
-                    GLib.Variant("(ss)", ("org.freedesktop.UPower", "LidIsClosed")),
-                    GLib.VariantType("(v)"),
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
-                self._lid_closed = result.get_child_value(0).get_variant().get_boolean()
+                self._lid_closed = _get("LidIsClosed")
                 log.info("Initial lid state: %s", "closed" if self._lid_closed else "open")
 
-                # Subscribe to PropertiesChanged
-                bus.signal_subscribe(
-                    "org.freedesktop.UPower",
-                    "org.freedesktop.DBus.Properties",
-                    "PropertiesChanged",
-                    "/org/freedesktop/UPower",
-                    None,
-                    Gio.DBusSignalFlags.NONE,
-                    _on_signal,
-                    None,
-                )
+                def _on_signal(_conn, _sender, _path, _iface, _signal, params, _ud):
+                    if params.get_child_value(0).get_string() != "org.freedesktop.UPower":
+                        return
+                    lid_val = params.get_child_value(1).lookup_value("LidIsClosed", GLib.VariantType("b"))
+                    if lid_val is None:
+                        return
+                    closed = lid_val.get_boolean()
+                    log.info("Lid state changed: %s", "closed" if closed else "open")
+                    self._lid_closed = closed
+                    if self._asyncio_loop:
+                        self._asyncio_loop.call_soon_threadsafe(self._on_lid_changed, closed)
 
-                loop = GLib.MainLoop.new(GLib.MainContext.default(), False)
-                loop.run()
+                bus.signal_subscribe("org.freedesktop.UPower", "org.freedesktop.DBus.Properties",
+                                     "PropertiesChanged", "/org/freedesktop/UPower",
+                                     None, Gio.DBusSignalFlags.NONE, _on_signal, None)
+                GLib.MainLoop.new(GLib.MainContext.default(), False).run()
             except Exception as e:
                 log.warning("Lid monitor failed: %s", e)
 
-        def _on_signal(_conn, _sender, _path, _iface, _signal, params, _user_data):
-            iface_name = params.get_child_value(0).get_string()
-            if iface_name != "org.freedesktop.UPower":
-                return
-            changed = params.get_child_value(1)
-            lid_val = changed.lookup_value("LidIsClosed", GLib.VariantType("b"))
-            if lid_val is None:
-                return
-            closed = lid_val.get_boolean()
-            log.info("Lid state changed: %s", "closed" if closed else "open")
-            self._lid_closed = closed
-            if self._ipc and self._asyncio_loop:
-                self._asyncio_loop.call_soon_threadsafe(
-                    self._schedule_apply, self._ipc,
-                )
-
-        thread = threading.Thread(target=_run, daemon=True, name="lid-monitor")
-        thread.start()
+        threading.Thread(target=_run, daemon=True, name="lid-monitor").start()
 
     def _migrate_orphaned_workspaces(
         self,
