@@ -112,6 +112,17 @@ class MonitorConfig:
     sdr_brightness: float = 1.0
     sdr_saturation: float = 1.0
 
+    # HDR / EDID Override (Hyprland monitorv2 only)
+    hdr: bool = False
+    sdr_eotf: int = 0              # 0=global, 1=sRGB, 2=Gamma 2.2
+    supports_hdr: int = 0          # 0=auto, 1=force on
+    supports_wide_color: int = 0   # 0=auto, 1=force on
+    sdr_min_luminance: float = 0.0
+    sdr_max_luminance: float = 0.0
+    min_luminance: float = 0.0
+    max_luminance: float = 0.0
+    max_avg_luminance: float = 0.0
+
     # Reserved area
     reserved_top: int = 0
     reserved_bottom: int = 0
@@ -393,6 +404,103 @@ class MonitorConfig:
             line += f", {extra}"
 
         return line
+
+    def to_hyprland_v2_block(
+        self,
+        use_description: bool = False,
+        name_to_id: dict[str, str] | None = None,
+    ) -> str:
+        """Generate a ``monitorv2 { … }`` config block for Hyprland >= 0.50."""
+        lines: list[str] = []
+
+        # Name (must be first attribute)
+        if use_description and self.description:
+            lines.append(f"  name = desc:{self.description}")
+        else:
+            lines.append(f"  name = {self.name}")
+
+        # Disabled monitor
+        if not self.enabled:
+            lines.append("  enabled = false")
+            return "monitorv2 {\n" + "\n".join(lines) + "\n}"
+
+        # Resolution
+        if self.resolution_mode == ResolutionMode.EXPLICIT:
+            refresh = f"{self.refresh_rate:g}"
+            lines.append(f"  resolution = {self.width}x{self.height}@{refresh}")
+        else:
+            lines.append(f"  resolution = {self.resolution_mode.value}")
+
+        # Position
+        if self.position_mode == PositionMode.EXPLICIT:
+            lines.append(f"  position = {self.x}x{self.y}")
+        else:
+            lines.append(f"  position = {self.position_mode.value}")
+
+        # Scale
+        if self.scale_mode == ScaleMode.AUTO:
+            lines.append("  scale = auto")
+        else:
+            lines.append(f"  scale = {self.scale:g}")
+
+        # Transform
+        if self.transform != Transform.NORMAL:
+            lines.append(f"  transform = {self.transform.value}")
+
+        # Mirror
+        if self.mirror_of:
+            mirror_id = self.mirror_of
+            if name_to_id and self.mirror_of in name_to_id:
+                mirror_id = name_to_id[self.mirror_of]
+            lines.append(f"  mirror = {mirror_id}")
+
+        # Bitdepth
+        if self.bitdepth != 8:
+            lines.append(f"  bitdepth = {self.bitdepth}")
+
+        # VRR
+        if self.vrr != VRR.OFF:
+            lines.append(f"  vrr = {self.vrr.value}")
+
+        # Color management
+        if self.color_management:
+            lines.append(f"  cm = {self.color_management}")
+
+        # SDR brightness / saturation
+        if self.sdr_brightness != 1.0:
+            lines.append(f"  sdrbrightness = {self.sdr_brightness:g}")
+        if self.sdr_saturation != 1.0:
+            lines.append(f"  sdrsaturation = {self.sdr_saturation:g}")
+
+        # Reserved area (space-separated in v2)
+        if any((self.reserved_top, self.reserved_bottom,
+                self.reserved_left, self.reserved_right)):
+            lines.append(
+                f"  addreserved = {self.reserved_top} {self.reserved_bottom} "
+                f"{self.reserved_left} {self.reserved_right}"
+            )
+
+        # HDR / EDID Override
+        if self.hdr:
+            lines.append("  hdr = true")
+        if self.sdr_eotf != 0:
+            lines.append(f"  sdr_eotf = {self.sdr_eotf}")
+        if self.supports_hdr != 0:
+            lines.append(f"  supports_hdr = {self.supports_hdr}")
+        if self.supports_wide_color != 0:
+            lines.append(f"  supports_wide_color = {self.supports_wide_color}")
+        if self.sdr_min_luminance != 0.0:
+            lines.append(f"  sdr_min_luminance = {self.sdr_min_luminance:g}")
+        if self.sdr_max_luminance != 0.0:
+            lines.append(f"  sdr_max_luminance = {self.sdr_max_luminance:g}")
+        if self.min_luminance != 0.0:
+            lines.append(f"  min_luminance = {self.min_luminance:g}")
+        if self.max_luminance != 0.0:
+            lines.append(f"  max_luminance = {self.max_luminance:g}")
+        if self.max_avg_luminance != 0.0:
+            lines.append(f"  max_avg_luminance = {self.max_avg_luminance:g}")
+
+        return "monitorv2 {\n" + "\n".join(lines) + "\n}"
 
     def to_dict(self) -> dict:
         """Serialize to a JSON-friendly dict."""
@@ -753,7 +861,7 @@ class Profile:
             workspace_rules=[WorkspaceRule.from_dict(w) for w in d.get("workspace_rules", [])],
         )
 
-    def generate_config(self, use_description: bool = False) -> str:
+    def generate_config(self, use_description: bool = False, use_v2: bool = False) -> str:
         """Generate the full monitors.conf content for Hyprland."""
         # Build name→identifier mapping for workspace rules and mirror references
         name_to_id: dict[str, str] = {}
@@ -766,10 +874,17 @@ class Profile:
         lines: list[str] = []
         lines.append("# Generated by Monique — https://github.com/ToRvaLDz/monique")
         lines.append("")
-        for m in self.monitors:
-            lines.append(m.to_hyprland_line(
-                use_description=use_description, name_to_id=name_to_id,
-            ))
+        if use_v2:
+            for m in self.monitors:
+                lines.append(m.to_hyprland_v2_block(
+                    use_description=use_description, name_to_id=name_to_id,
+                ))
+                lines.append("")
+        else:
+            for m in self.monitors:
+                lines.append(m.to_hyprland_line(
+                    use_description=use_description, name_to_id=name_to_id,
+                ))
         if self.workspace_rules:
             lines.append("")
             for w in self.workspace_rules:

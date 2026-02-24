@@ -231,7 +231,71 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._grp_reserved.add(self._spin_res_right)
         _fix_spin_icons(self._spin_res_right)
 
-    def set_compositor(self, backend: str) -> None:
+        # ── HDR / EDID Override (Hyprland monitorv2 only) ──────────
+        self._grp_hdr = Adw.PreferencesGroup(
+            title="HDR / EDID Override",
+            description="Hyprland 0.50+ (monitorv2)",
+        )
+        self.add(self._grp_hdr)
+
+        self._sw_hdr = Adw.SwitchRow(title="HDR")
+        self._sw_hdr.connect("notify::active", self._on_changed)
+        self._grp_hdr.add(self._sw_hdr)
+
+        self._combo_sdr_eotf = Adw.ComboRow(title="SDR EOTF")
+        self._combo_sdr_eotf.set_model(Gtk.StringList.new(["Global", "sRGB", "Gamma 2.2"]))
+        self._combo_sdr_eotf.connect("notify::selected", self._on_changed)
+        self._grp_hdr.add(self._combo_sdr_eotf)
+
+        self._combo_supports_hdr = Adw.ComboRow(title="Supports HDR")
+        self._combo_supports_hdr.set_model(Gtk.StringList.new(["Auto", "Force"]))
+        self._combo_supports_hdr.connect("notify::selected", self._on_changed)
+        self._grp_hdr.add(self._combo_supports_hdr)
+
+        self._combo_supports_wide = Adw.ComboRow(title="Supports Wide Color")
+        self._combo_supports_wide.set_model(Gtk.StringList.new(["Auto", "Force"]))
+        self._combo_supports_wide.connect("notify::selected", self._on_changed)
+        self._grp_hdr.add(self._combo_supports_wide)
+
+        self._spin_sdr_min_lum = Adw.SpinRow.new_with_range(0.0, 10.0, 0.001)
+        self._spin_sdr_min_lum.set_title("SDR Min Luminance")
+        self._spin_sdr_min_lum.set_digits(3)
+        self._spin_sdr_min_lum.connect("notify::value", self._on_changed)
+        self._grp_hdr.add(self._spin_sdr_min_lum)
+        _fix_spin_icons(self._spin_sdr_min_lum)
+
+        self._spin_sdr_max_lum = Adw.SpinRow.new_with_range(0.0, 2000.0, 1.0)
+        self._spin_sdr_max_lum.set_title("SDR Max Luminance")
+        self._spin_sdr_max_lum.set_digits(1)
+        self._spin_sdr_max_lum.connect("notify::value", self._on_changed)
+        self._grp_hdr.add(self._spin_sdr_max_lum)
+        _fix_spin_icons(self._spin_sdr_max_lum)
+
+        self._spin_min_lum = Adw.SpinRow.new_with_range(0.0, 2000.0, 1.0)
+        self._spin_min_lum.set_title("Min Luminance")
+        self._spin_min_lum.set_digits(1)
+        self._spin_min_lum.connect("notify::value", self._on_changed)
+        self._grp_hdr.add(self._spin_min_lum)
+        _fix_spin_icons(self._spin_min_lum)
+
+        self._spin_max_lum = Adw.SpinRow.new_with_range(0.0, 10000.0, 1.0)
+        self._spin_max_lum.set_title("Max Luminance")
+        self._spin_max_lum.set_digits(1)
+        self._spin_max_lum.connect("notify::value", self._on_changed)
+        self._grp_hdr.add(self._spin_max_lum)
+        _fix_spin_icons(self._spin_max_lum)
+
+        self._spin_max_avg_lum = Adw.SpinRow.new_with_range(0.0, 10000.0, 1.0)
+        self._spin_max_avg_lum.set_title("Max Avg Luminance")
+        self._spin_max_avg_lum.set_digits(1)
+        self._spin_max_avg_lum.connect("notify::value", self._on_changed)
+        self._grp_hdr.add(self._spin_max_avg_lum)
+        _fix_spin_icons(self._spin_max_avg_lum)
+
+        # Default to insensitive
+        self._grp_hdr.set_sensitive(False)
+
+    def set_compositor(self, backend: str, hyprland_v2: bool = False) -> None:
         """Disable controls not supported by the active compositor.
 
         backend should be "hyprland", "sway", or "niri".
@@ -280,6 +344,9 @@ class PropertiesPanel(Adw.PreferencesPage):
                 ResolutionMode.PREFERRED.value,
             ])
         self._combo_res_mode.set_model(res_modes)
+
+        # HDR / EDID Override: only for Hyprland >= 0.50
+        self._grp_hdr.set_sensitive(is_hyprland and hyprland_v2)
 
     def set_enabled_locked(self, locked: bool) -> None:
         """Lock the Enabled switch (e.g. for clamshell-managed monitors)."""
@@ -389,6 +456,17 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_res_left.set_value(monitor.reserved_left)
         self._spin_res_right.set_value(monitor.reserved_right)
 
+        # HDR / EDID Override
+        self._sw_hdr.set_active(monitor.hdr)
+        self._combo_sdr_eotf.set_selected(monitor.sdr_eotf)
+        self._combo_supports_hdr.set_selected(monitor.supports_hdr)
+        self._combo_supports_wide.set_selected(monitor.supports_wide_color)
+        self._spin_sdr_min_lum.set_value(monitor.sdr_min_luminance)
+        self._spin_sdr_max_lum.set_value(monitor.sdr_max_luminance)
+        self._spin_min_lum.set_value(monitor.min_luminance)
+        self._spin_max_lum.set_value(monitor.max_luminance)
+        self._spin_max_avg_lum.set_value(monitor.max_avg_luminance)
+
         self._building = False
 
     def _apply_to_monitor(self) -> None:
@@ -453,6 +531,17 @@ class PropertiesPanel(Adw.PreferencesPage):
         m.reserved_bottom = int(self._spin_res_bottom.get_value())
         m.reserved_left = int(self._spin_res_left.get_value())
         m.reserved_right = int(self._spin_res_right.get_value())
+
+        # HDR / EDID Override
+        m.hdr = self._sw_hdr.get_active()
+        m.sdr_eotf = self._combo_sdr_eotf.get_selected()
+        m.supports_hdr = self._combo_supports_hdr.get_selected()
+        m.supports_wide_color = self._combo_supports_wide.get_selected()
+        m.sdr_min_luminance = round(self._spin_sdr_min_lum.get_value(), 3)
+        m.sdr_max_luminance = round(self._spin_sdr_max_lum.get_value(), 1)
+        m.min_luminance = round(self._spin_min_lum.get_value(), 1)
+        m.max_luminance = round(self._spin_max_lum.get_value(), 1)
+        m.max_avg_luminance = round(self._spin_max_avg_lum.get_value(), 1)
 
     def _parse_mode_string(self, m: MonitorConfig, mode_str: str) -> None:
         """Parse a mode string like '1920x1080@60.00' into monitor fields."""

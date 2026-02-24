@@ -30,6 +30,38 @@ class HyprlandIPC:
 
     def __init__(self) -> None:
         self._runtime = hyprland_runtime_dir()
+        self._version: tuple[int, int, int] | None = None
+        self._supports_v2: bool | None = None
+
+    def get_version(self) -> tuple[int, int, int]:
+        """Return the Hyprland version as (major, minor, patch).
+
+        Parses the ``tag`` field from ``hyprctl version -j`` (e.g. ``v0.50.0``).
+        Result is cached for the instance lifetime.
+        """
+        if self._version is not None:
+            return self._version
+        try:
+            import re
+            data = self.command_json("version")
+            tag = data.get("tag", "")
+            parts = [
+                re.match(r"\d+", p).group() if re.match(r"\d+", p) else "0"
+                for p in tag.lstrip("v").split(".")
+            ]
+            while len(parts) < 3:
+                parts.append("0")
+            self._version = (int(parts[0]), int(parts[1]), int(parts[2]))
+        except Exception:
+            self._version = (0, 0, 0)
+        return self._version
+
+    @property
+    def supports_v2(self) -> bool:
+        """True if the running Hyprland supports monitorv2 (>= 0.50)."""
+        if self._supports_v2 is None:
+            self._supports_v2 = self.get_version() >= (0, 50, 0)
+        return self._supports_v2
 
     @property
     def command_socket(self) -> Path:
@@ -161,8 +193,10 @@ class HyprlandIPC:
         # Backup existing
         backup_file(monitors_conf)
 
-        # Write new config
-        write_text(monitors_conf, profile.generate_config(use_description=use_description))
+        # Write new config (monitorv2 blocks for Hyprland >= 0.50)
+        write_text(monitors_conf, profile.generate_config(
+            use_description=use_description, use_v2=self.supports_v2,
+        ))
 
         # Also write Sway config if Sway is installed
         if is_sway_installed():
@@ -200,13 +234,31 @@ class HyprlandIPC:
                 name_to_id[m.name] = m.name
 
         cmds: list[str] = []
-        for m in profile.monitors:
-            line = m.to_hyprland_line(
-                use_description=use_description, name_to_id=name_to_id,
-            )
-            # strip "monitor=" prefix for keyword command
-            value = line.removeprefix("monitor=")
-            cmds.append(f"keyword monitor {value}")
+        if self.supports_v2:
+            for m in profile.monitors:
+                block = m.to_hyprland_v2_block(
+                    use_description=use_description, name_to_id=name_to_id,
+                )
+                # Strip "monitorv2 {" and "}" to get inner content,
+                # then send each line as a keyword command
+                ident = name_to_id.get(m.name, m.name)
+                prefix = f"keyword monitorv2[{ident}]"
+                for line in block.split("\n"):
+                    line = line.strip()
+                    if line.startswith("name =") or not line or line in ("monitorv2 {", "}"):
+                        continue
+                    key, _, val = line.partition(" = ")
+                    key = key.strip()
+                    val = val.strip()
+                    cmds.append(f"{prefix}:{key} {val}")
+        else:
+            for m in profile.monitors:
+                line = m.to_hyprland_line(
+                    use_description=use_description, name_to_id=name_to_id,
+                )
+                # strip "monitor=" prefix for keyword command
+                value = line.removeprefix("monitor=")
+                cmds.append(f"keyword monitor {value}")
         if cmds:
             self.batch(cmds)
 

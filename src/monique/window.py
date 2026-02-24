@@ -250,7 +250,10 @@ class MainWindow(Adw.ApplicationWindow):
         elif isinstance(self._ipc, SwayIPC):
             self._props.set_compositor("sway")
         else:
-            self._props.set_compositor("hyprland")
+            self._props.set_compositor(
+                "hyprland",
+                hyprland_v2=self._ipc.supports_v2,
+            )
         self._props.connect("property-changed", self._on_property_changed)
         scroll.set_child(self._props)
         self._split.set_sidebar(scroll)
