@@ -210,6 +210,7 @@ class MonitorDaemon:
         try:
             monitors = ipc.get_monitors()
             fingerprint = sorted(m.description for m in monitors if m.description)
+            connected_descs = {m.description for m in monitors if m.description}
             log.info("Current fingerprint: %s", fingerprint)
 
             settings = load_app_settings()
@@ -237,13 +238,55 @@ class MonitorDaemon:
                 # When clamshell is active, the daemon owns internal display
                 # control.  First ensure internal monitors are enabled
                 # (handles profiles saved with the old manual toggle), then
-                # disable them if the lid is closed.
+                # disable them only if the lid is closed AND external
+                # monitors are actually connected right now.
                 if clamshell:
                     profile = Profile.from_dict(profile.to_dict())
                     undo_clamshell(profile.monitors)
                     if self._lid_closed is not False:
-                        apply_clamshell(profile.monitors)
-                        log.info("Clamshell: lid closed, disabled internal display(s)")
+                        connected_externals = [
+                            m for m in profile.monitors
+                            if not m.is_internal and m.enabled
+                            and m.description in connected_descs
+                        ]
+                        if connected_externals:
+                            apply_clamshell(profile.monitors)
+                            log.info("Clamshell: lid closed, disabled internal display(s)")
+                        else:
+                            log.info(
+                                "Clamshell: lid closed but no external monitors "
+                                "connected, keeping internal display(s) enabled"
+                            )
+
+                # Safety: ensure at least one actually-connected monitor
+                # remains enabled.  Prevents black screen in edge cases.
+                enabled_connected = [
+                    m for m in profile.monitors
+                    if m.enabled and m.description in connected_descs
+                ]
+                if not enabled_connected:
+                    log.warning(
+                        "Safety: profile %s would disable all connected "
+                        "monitors, force-enabling internal display(s)",
+                        profile.name,
+                    )
+                    recovered = False
+                    for m in profile.monitors:
+                        if m.is_internal and m.description in connected_descs:
+                            m.enabled = True
+                            recovered = True
+                    if not recovered:
+                        for m in profile.monitors:
+                            if m.description in connected_descs:
+                                m.enabled = True
+                                recovered = True
+                                break
+                    if not recovered:
+                        log.error(
+                            "Safety: cannot find any connected monitor to "
+                            "enable, skipping profile apply"
+                        )
+                        return
 
                 # Snapshot workspaces before applying
                 ws_snapshot = ipc.get_workspaces()
@@ -264,19 +307,45 @@ class MonitorDaemon:
                 # Migrate orphaned workspaces (Niri handles this natively)
                 if not isinstance(ipc, NiriIPC) and settings.get("migrate_workspaces", True):
                     self._migrate_orphaned_workspaces(ipc, profile, ws_snapshot)
-            elif clamshell and self._lid_closed is False:
-                # No saved profile, lid open → re-enable internal
-                if undo_clamshell(monitors):
-                    log.info("Clamshell: re-enabled internal display(s)")
-                    temp = Profile(name="clamshell-undo", monitors=monitors)
+            else:
+                # No matching profile found.
+                # Safety: check if all connected monitors are disabled and
+                # try to recover by enabling internal displays.
+                all_disabled = monitors and all(not m.enabled for m in monitors)
+                has_disabled_internal = any(
+                    m.is_internal and not m.enabled for m in monitors
+                )
+
+                if clamshell and self._lid_closed is False and has_disabled_internal:
+                    # Lid is definitely open → re-enable internal
+                    if undo_clamshell(monitors):
+                        log.info("Clamshell: lid open, re-enabled internal display(s)")
+                        temp = Profile(name="clamshell-undo", monitors=monitors)
+                        update_sddm = settings.get("update_sddm", True)
+                        use_desc = not settings.get("use_port_names", False)
+                        ipc.apply_profile(
+                            temp, update_sddm=update_sddm, use_description=use_desc,
+                        )
+                        self._last_apply_time = time.monotonic()
+                elif all_disabled and has_disabled_internal:
+                    # Emergency: all monitors off regardless of clamshell/lid
+                    # state.  Re-enable internal to avoid black screen.
+                    log.warning(
+                        "All connected monitors disabled with no matching "
+                        "profile, force-enabling internal display(s)"
+                    )
+                    for m in monitors:
+                        if m.is_internal:
+                            m.enabled = True
+                    temp = Profile(name="emergency-recovery", monitors=monitors)
                     update_sddm = settings.get("update_sddm", True)
                     use_desc = not settings.get("use_port_names", False)
                     ipc.apply_profile(
                         temp, update_sddm=update_sddm, use_description=use_desc,
                     )
                     self._last_apply_time = time.monotonic()
-            else:
-                log.info("No matching profile found")
+                else:
+                    log.info("No matching profile found")
         except Exception as e:
             log.error("Failed to apply profile: %s", e)
 
