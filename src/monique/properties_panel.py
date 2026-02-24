@@ -113,9 +113,9 @@ class PropertiesPanel(Adw.PreferencesPage):
         grp_res.add(self._spin_height)
         _fix_spin_icons(self._spin_height)
 
-        self._spin_refresh = Adw.SpinRow.new_with_range(1, 600, 0.01)
+        self._spin_refresh = Adw.SpinRow.new_with_range(1, 600, 0.001)
         self._spin_refresh.set_title("Refresh Rate")
-        self._spin_refresh.set_digits(2)
+        self._spin_refresh.set_digits(3)
         self._spin_refresh.connect("notify::value", self._on_changed)
         grp_res.add(self._spin_refresh)
         _fix_spin_icons(self._spin_refresh)
@@ -413,7 +413,7 @@ class PropertiesPanel(Adw.PreferencesPage):
             else:
                 m.width = int(self._spin_width.get_value())
                 m.height = int(self._spin_height.get_value())
-                m.refresh_rate = round(self._spin_refresh.get_value(), 2)
+                m.refresh_rate = round(self._spin_refresh.get_value(), 3)
 
         # Position
         m.position_mode = self._combo_enum_value(self._combo_pos_mode, PositionMode, PositionMode.EXPLICIT)
@@ -463,7 +463,7 @@ class PropertiesPanel(Adw.PreferencesPage):
             m.height = int(h)
             # Remove trailing " Hz" if present
             rate_part = rate_part.replace("Hz", "").strip()
-            m.refresh_rate = round(float(rate_part), 2)
+            m.refresh_rate = round(float(rate_part), 3)
         except (ValueError, IndexError):
             pass
 

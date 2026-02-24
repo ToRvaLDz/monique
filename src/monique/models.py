@@ -300,7 +300,7 @@ class MonitorConfig:
         # Resolution
         if self.resolution_mode == ResolutionMode.EXPLICIT:
             parts.append(f"--mode {self.width}x{self.height}")
-            parts.append(f"--rate {self.refresh_rate:.2f}")
+            parts.append(f"--rate {self.refresh_rate:.3f}")
         else:
             parts.append("--auto")
 
@@ -453,7 +453,7 @@ class MonitorConfig:
             serial=data.get("serial", ""),
             width=data.get("width", 1920),
             height=data.get("height", 1080),
-            refresh_rate=round(data.get("refreshRate", 60.0), 2),
+            refresh_rate=round(data.get("refreshRate", 60.0), 3),
             resolution_mode=ResolutionMode.EXPLICIT,
             available_modes=modes,
             x=raw_x,
@@ -481,15 +481,15 @@ class MonitorConfig:
         height = current_mode.get("height", 1080)
         # Sway reports refresh in millihertz
         refresh_mhz = current_mode.get("refresh", 60000)
-        refresh_rate = round(refresh_mhz / 1000.0, 2)
+        refresh_rate = round(refresh_mhz / 1000.0, 3)
 
         # Available modes
         modes: list[str] = []
         for m in data.get("modes", []):
             mw = m.get("width", 0)
             mh = m.get("height", 0)
-            mr = round(m.get("refresh", 0) / 1000.0, 2)
-            modes.append(f"{mw}x{mh}@{mr:.2f}Hz")
+            mr = round(m.get("refresh", 0) / 1000.0, 3)
+            modes.append(f"{mw}x{mh}@{mr:.3f}Hz")
 
         # Position
         rect = data.get("rect", {})
@@ -558,15 +558,15 @@ class MonitorConfig:
         height = current_mode.get("height", 1080)
         # Niri reports refresh in millihertz
         refresh_mhz = current_mode.get("refresh_rate", 60000)
-        refresh_rate = round(refresh_mhz / 1000.0, 2)
+        refresh_rate = round(refresh_mhz / 1000.0, 3)
 
         # Available modes
         available: list[str] = []
         for m in modes_list:
             mw = m.get("width", 0)
             mh = m.get("height", 0)
-            mr = round(m.get("refresh_rate", 0) / 1000.0, 2)
-            available.append(f"{mw}x{mh}@{mr:.2f}Hz")
+            mr = round(m.get("refresh_rate", 0) / 1000.0, 3)
+            available.append(f"{mw}x{mh}@{mr:.3f}Hz")
 
         # Logical info (position, scale, transform) — null if disabled
         logical = data.get("logical")
