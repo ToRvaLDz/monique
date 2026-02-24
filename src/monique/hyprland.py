@@ -245,7 +245,7 @@ class HyprlandIPC:
                 prefix = f"keyword monitorv2[{ident}]"
                 for line in block.split("\n"):
                     line = line.strip()
-                    if line.startswith("name =") or not line or line in ("monitorv2 {", "}"):
+                    if line.startswith("output =") or not line or line in ("monitorv2 {", "}"):
                         continue
                     key, _, val = line.partition(" = ")
                     key = key.strip()
