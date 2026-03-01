@@ -259,8 +259,9 @@ class MonitorConfig:
             if niri_ids and self.description in niri_ids:
                 identifier = f'"{niri_ids[self.description]}"'
             elif niri_ids is None:
-                # No mapping available, best-effort with normalised description
-                identifier = f'"{self.description}"'
+                # No Niri IPC available (cross-write from another compositor);
+                # use connector name — DRM names are consistent across Wayland
+                identifier = f'"{self.name}"'
             else:
                 # Mapping available but monitor not in it (e.g. off monitor
                 # not currently visible to Niri); fall back to port name
