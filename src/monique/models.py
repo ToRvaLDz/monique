@@ -842,10 +842,11 @@ Matches monitors by EDID description so the script works regardless of
 whether the X11 driver uses the same output names as the Wayland compositor
 (e.g. NVIDIA uses DFP-* instead of DP-*/HDMI-A-*).
 """
-import re, subprocess, sys
+import re, subprocess, sys, time
 
 # (edid_description, wayland_name, xrandr_args_with_wayland_name)
 MONITORS = {monitors}
+FB_SIZE = "{fb_size}"
 
 
 def _parse_edid(hex_str):
@@ -950,10 +951,42 @@ def _resolve(monitors, edid_map):
 
 
 def main():
+    lf = open("/tmp/monique-xsetup.log", "w")
+    def _log(msg):
+        lf.write(msg + "\\n")
+        lf.flush()
+
+    _log("Monique Xsetup — " + time.strftime("%Y-%m-%d %H:%M:%S"))
+
     edid_map = _get_edid_map()
+    _log("EDID map: " + repr(edid_map))
+
     args = _resolve(MONITORS, edid_map)
-    cmd = ["xrandr"] + args
-    subprocess.run(" ".join(cmd), shell=True)
+    _log("Resolved args: " + repr(args))
+
+    # Detect used X11 output names
+    used = set()
+    for a in args:
+        m = re.match(r"--output\\s+(\\S+)", a)
+        if m:
+            used.add(m.group(1))
+
+    # Disable connected outputs not in our layout
+    for x11 in sorted(edid_map):
+        if x11 not in used:
+            args.append("--output " + x11 + " --off")
+            _log("Disabling unused output: " + x11)
+
+    cmd = "xrandr --fb " + FB_SIZE + " " + " ".join(args)
+    _log("Command: " + cmd)
+
+    r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    _log("Return code: " + str(r.returncode))
+    if r.stdout.strip():
+        _log("stdout: " + r.stdout.strip())
+    if r.stderr.strip():
+        _log("stderr: " + r.stderr.strip())
+    lf.close()
 
 
 if __name__ == "__main__":
@@ -1066,14 +1099,22 @@ class Profile:
         phys_pos = self._compute_physical_positions()
 
         monitors_data: list[tuple[str, str, str]] = []
+        fb_w = 0
+        fb_h = 0
         for m in self.monitors:
             if not m.enabled:
                 continue  # skip disabled monitors; xrandr leaves them at X11 default
             px, py = phys_pos.get(m.name, (m.x, m.y))
             args = m.to_xrandr_args(phys_x=px, phys_y=py)
             monitors_data.append((m.description, m.name, args))
+            pw, ph = m.physical_size_rotated
+            fb_w = max(fb_w, px + pw)
+            fb_h = max(fb_h, py + ph)
 
-        return _XSETUP_TEMPLATE.format(monitors=repr(monitors_data))
+        return _XSETUP_TEMPLATE.format(
+            monitors=repr(monitors_data),
+            fb_size=f"{fb_w}x{fb_h}",
+        )
 
     def _compute_physical_positions(self) -> dict[str, tuple[int, int]]:
         """Convert logical compositor positions to physical xrandr positions.
