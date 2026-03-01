@@ -258,13 +258,19 @@ class MonitorConfig:
         if use_description and self.description:
             if niri_ids and self.description in niri_ids:
                 identifier = f'"{niri_ids[self.description]}"'
-            elif niri_ids is None:
-                # No Niri IPC available (cross-write from another compositor);
-                # use connector name — DRM names are consistent across Wayland
-                identifier = f'"{self.name}"'
+            elif niri_ids is None and self.make:
+                # No Niri IPC available (cross-write from another compositor).
+                # Reconstruct the Niri-native description from make/model/serial.
+                # Match primarily by serial; fall back to model if unavailable.
+                make = self.make
+                if len(make) == 3 and make.isalpha() and make.isupper():
+                    make = f"PNP({make})"
+                serial = self.serial if self.serial and self.serial != "Unknown" else ""
+                parts = [p for p in (make, self.model, serial) if p]
+                identifier = f'"{" ".join(parts)}"'
             else:
-                # Mapping available but monitor not in it (e.g. off monitor
-                # not currently visible to Niri); fall back to port name
+                # Mapping available but monitor not in it, or no make info;
+                # fall back to connector name
                 identifier = f'"{self.name}"'
         else:
             identifier = f'"{self.name}"'
