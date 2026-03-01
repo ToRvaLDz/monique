@@ -186,10 +186,28 @@ class MonitorConfig:
         7: ("right", "x"),
     }
 
-    # Mapping from Transform enum (CCW, Wayland protocol) to Sway config
-    # Sway transform strings match WL_OUTPUT_TRANSFORM enum values:
-    # both Hyprland and Sway use the same Wayland protocol convention.
+    # Mapping from Transform enum (CCW, Wayland protocol) to Sway config.
+    # Sway rotates CLOCKWISE while the Wayland protocol / Hyprland use CCW,
+    # so 90° CCW (enum 1) becomes Sway "270" (270° CW) and vice-versa.
     _SWAY_TRANSFORMS: ClassVar[dict[int, str]] = {
+        0: "normal",
+        1: "270",
+        2: "180",
+        3: "90",
+        4: "flipped",
+        5: "flipped-270",
+        6: "flipped-180",
+        7: "flipped-90",
+    }
+
+    # Inverse mapping: Sway transform string -> Transform enum value
+    _SWAY_TRANSFORMS_INV: ClassVar[dict[str, int]] = {
+        v: k for k, v in _SWAY_TRANSFORMS.items()
+    }
+
+    # Mapping from Transform enum (CCW) to Niri config strings.
+    # Niri follows the Wayland protocol CCW convention, so values map 1:1.
+    _NIRI_TRANSFORMS: ClassVar[dict[int, str]] = {
         0: "normal",
         1: "90",
         2: "180",
@@ -198,11 +216,6 @@ class MonitorConfig:
         5: "flipped-90",
         6: "flipped-180",
         7: "flipped-270",
-    }
-
-    # Inverse mapping: Sway transform string -> Transform enum value
-    _SWAY_TRANSFORMS_INV: ClassVar[dict[str, int]] = {
-        v: k for k, v in _SWAY_TRANSFORMS.items()
     }
 
     # Mapping from Niri JSON transform string -> Transform enum value
@@ -287,8 +300,8 @@ class MonitorConfig:
         if self.scale_mode == ScaleMode.EXPLICIT:
             lines.append(f"    scale {self.scale:g}")
 
-        # Transform (same values as Sway)
-        transform_str = self._SWAY_TRANSFORMS[self.transform.value]
+        # Transform (Niri uses CCW like Wayland protocol, different from Sway CW)
+        transform_str = self._NIRI_TRANSFORMS[self.transform.value]
         if transform_str != "normal":
             lines.append(f'    transform "{transform_str}"')
 
