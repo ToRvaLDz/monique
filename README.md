@@ -60,6 +60,7 @@
 
 - **Drag-and-drop layout** — arrange monitors visually on an interactive canvas
 - **Multi-backend** — auto-detects Hyprland, Sway, or Niri from the environment
+- **Cross-write** — save a profile in any compositor and automatically generate config files for the others (e.g. configure in Hyprland → get Sway and Niri configs for free)
 - **Profile system** — save, load, and switch between monitor configurations
 - **Hotplug daemon** (`moniqued`) — automatically applies the best matching profile when monitors are connected or disconnected
 - **Display manager integration** — syncs your layout to the login screen for SDDM (xrandr) and greetd (sway), with polkit rule for passwordless writes
@@ -99,7 +100,15 @@ cd monique
 pip install .
 ```
 
-**Runtime dependencies:** `python`, `python-gobject`, `gtk4`, `libadwaita`
+**Runtime dependencies:**
+
+| Distro | Packages |
+|--------|----------|
+| Arch / CachyOS | `python python-gobject gtk4 libadwaita` |
+| Fedora | `python3 python3-gobject gtk4 libadwaita` |
+| openSUSE | `python3 python3-gobject gtk4 libadwaita typelib-1_0-Adw-1 typelib-1_0-Gtk-4_0` |
+| Ubuntu / Debian | `python3 python3-gi gir1.2-gtk-4.0 gir1.2-adw-1 libadwaita-1-0` |
+
 **Optional:** `python-pyudev` (hardware hotplug detection for Niri)
 
 ## Usage
