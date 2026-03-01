@@ -11,17 +11,17 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/ToRvaLDz/monique/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ToRvaLDz/monique/actions/workflows/ci.yml/badge.svg?v=0.4.0"></a>
-  <a href="https://github.com/ToRvaLDz/monique/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/ToRvaLDz/monique?include_prereleases&label=release&color=orange&v=0.4.0"></a>
-  <a href="https://pypi.org/project/monique/"><img alt="PyPI" src="https://img.shields.io/pypi/v/monique?color=blue&label=PyPI&v=0.4.0"></a>
-  <a href="https://aur.archlinux.org/packages/monique"><img alt="AUR" src="https://img.shields.io/aur/version/monique?color=1793d1&label=AUR&v=0.4.0"></a>
+  <a href="https://github.com/ToRvaLDz/monique/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ToRvaLDz/monique/actions/workflows/ci.yml/badge.svg?v=0.5.0"></a>
+  <a href="https://github.com/ToRvaLDz/monique/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/ToRvaLDz/monique?include_prereleases&label=release&color=orange&v=0.5.0"></a>
+  <a href="https://pypi.org/project/monique/"><img alt="PyPI" src="https://img.shields.io/pypi/v/monique?color=blue&label=PyPI&v=0.5.0"></a>
+  <a href="https://aur.archlinux.org/packages/monique"><img alt="AUR" src="https://img.shields.io/aur/version/monique?color=1793d1&label=AUR&v=0.5.0"></a>
   <a href="LICENSE"><img alt="License: GPL-3.0" src="https://img.shields.io/badge/license-GPL--3.0-blue"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11+-green">
   <img alt="GTK4 + Adwaita" src="https://img.shields.io/badge/toolkit-GTK4%20%2B%20Adwaita-purple">
   <br>
-  <a href="https://github.com/ToRvaLDz/monique/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/ToRvaLDz/monique?style=flat&color=yellow&v=0.4.0"></a>
-  <img alt="Last commit" src="https://img.shields.io/github/last-commit/ToRvaLDz/monique?color=teal&v=0.4.0">
-  <img alt="Repo size" src="https://img.shields.io/github/repo-size/ToRvaLDz/monique?color=gray&v=0.4.0">
+  <a href="https://github.com/ToRvaLDz/monique/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/ToRvaLDz/monique?style=flat&color=yellow&v=0.5.0"></a>
+  <img alt="Last commit" src="https://img.shields.io/github/last-commit/ToRvaLDz/monique?color=teal&v=0.5.0">
+  <img alt="Repo size" src="https://img.shields.io/github/repo-size/ToRvaLDz/monique?color=gray&v=0.5.0">
   <br>
   <img alt="Hyprland" src="https://img.shields.io/badge/Hyprland-%2358e1ff?logo=hyprland&logoColor=white">
   <img alt="Sway" src="https://img.shields.io/badge/Sway-%2368751a?logo=sway&logoColor=white">
