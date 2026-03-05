@@ -34,7 +34,7 @@ build() {
 
 package() {
     cd "$pkgname-$pkgver"
-    python -m installer --destdir="$pkgdir" dist/*.whl
+    python -m installer --destdir="$pkgdir" "dist/monique-${pkgver}-py3-none-any.whl"
 
     # Desktop entry
     install -Dm644 data/com.github.monique.desktop \
