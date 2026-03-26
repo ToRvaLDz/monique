@@ -481,17 +481,10 @@ class PropertiesPanel(Adw.PreferencesPage):
         m.resolution_mode = self._combo_enum_value(self._combo_res_mode, ResolutionMode, ResolutionMode.EXPLICIT)
 
         if m.resolution_mode == ResolutionMode.EXPLICIT:
-            # Check if a mode was selected from dropdown
-            sel = self._combo_resolution.get_selected()
-            model = self._combo_resolution.get_model()
-            if model and sel < model.get_n_items() and sel != Gtk.INVALID_LIST_POSITION:
-                mode_str = model.get_string(sel)
-                # Parse "WxH@R" or "WxH@R Hz"
-                self._parse_mode_string(m, mode_str)
-            else:
-                m.width = int(self._spin_width.get_value())
-                m.height = int(self._spin_height.get_value())
-                m.refresh_rate = round(self._spin_refresh.get_value(), 3)
+            # Always use the manual spin control values
+            m.width = int(self._spin_width.get_value())
+            m.height = int(self._spin_height.get_value())
+            m.refresh_rate = round(self._spin_refresh.get_value(), 3)
 
         # Position
         m.position_mode = self._combo_enum_value(self._combo_pos_mode, PositionMode, PositionMode.EXPLICIT)
