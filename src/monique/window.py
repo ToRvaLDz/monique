@@ -29,6 +29,7 @@ from .utils import (
 
 import os
 from pathlib import Path
+import time
 
 
 def _detect_ipc() -> HyprlandIPC | NiriIPC | SwayIPC:
@@ -168,6 +169,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._dirty: bool = False
         self._lid_closed: bool = False
         self._app_settings = load_app_settings()
+        self._last_applied_time: float = 0
 
         self._build_ui()
         self._setup_actions()
@@ -723,6 +725,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_profile_selected(self, dropdown: Gtk.DropDown, pspec) -> None:
         if self._inhibit_profile_switch:
             return
+        self._last_applied_time = 0
         sel = dropdown.get_selected()
         if sel == 0:
             # Current = reload from Hyprland
@@ -738,6 +741,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._current_profile_name = profile.name
             self._base_profile_name = profile.name
             self._canvas.monitors = self._monitors
+            self._last_applied_time = profile.last_applied_time
             if self._monitors:
                 self._canvas.selected_index = 0
                 self._update_properties_for_selected()
@@ -841,6 +845,7 @@ class MainWindow(Adw.ApplicationWindow):
             name=name,
             monitors=list(self._monitors),
             workspace_rules=list(self._workspace_rules),
+            last_applied_time=self._last_applied_time
         )
         self._profile_mgr.save(profile)
         self._current_profile_name = name
@@ -1041,6 +1046,12 @@ class MainWindow(Adw.ApplicationWindow):
                 bak.unlink()
             self._migrated_workspaces = []
             self._base_profile_name = self._current_profile_name
+            self._last_applied_time = time.time()
+            # update profile's last applied time if applicable
+            # if its edited, then its no longer a named profile enforced by mark dirty
+            if profile := self._profile_mgr.load(self._base_profile_name):
+                profile.last_applied_time = self._last_applied_time
+                self._profile_mgr.save(profile)
             save_active_profile(self._current_profile_name or None)
             self._toast("Settings kept")
         else:

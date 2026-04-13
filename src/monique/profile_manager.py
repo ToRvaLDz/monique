@@ -144,13 +144,13 @@ class ProfileManager:
 
             candidates.append((
                 score, -missing_enabled, ext_enabled,
-                enabled_matches, config_matches, profile,
+                enabled_matches, config_matches, profile.last_applied_time, profile,
             ))
 
         if not candidates:
             return None
 
         # Best Jaccard, fewest missing enabled, most external enabled,
-        # most enabled matches, most config matches
-        candidates.sort(key=lambda c: (c[0], c[1], c[2], c[3], c[4]), reverse=True)
-        return candidates[0][5]
+        # most enabled matches, most config matches, latest applied profile time
+        candidates.sort(key=lambda c: (c[0], c[1], c[2], c[3], c[4], c[5]), reverse=True)
+        return candidates[0][6]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sys
+import time
 
 import gi
 gi.require_version("Gtk", "4.0")
@@ -80,6 +81,10 @@ def _cmd_switch_profile(name: str) -> int:
         use_description=not settings.get("use_port_names", False),
     )
     save_active_profile(name)
+    
+    profile.last_applied_time = time.time()
+    mgr.save(profile)
+
     print(name)
     return 0
 
