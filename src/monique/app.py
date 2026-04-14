@@ -81,7 +81,6 @@ def _cmd_switch_profile(name: str) -> int:
         use_description=not settings.get("use_port_names", False),
     )
     save_active_profile(name)
-    
     profile.last_applied_time = time.time()
     mgr.save(profile)
 

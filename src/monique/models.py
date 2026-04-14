@@ -1019,7 +1019,7 @@ class Profile:
     name: str = ""
     monitors: list[MonitorConfig] = field(default_factory=list)
     workspace_rules: list[WorkspaceRule] = field(default_factory=list)
-    last_applied_time: float = 0
+    last_applied_time: float = 0.0
 
     @property
     def fingerprint(self) -> list[str]:
@@ -1031,7 +1031,7 @@ class Profile:
             "name": self.name,
             "monitors": [m.to_dict() for m in self.monitors],
             "workspace_rules": [w.to_dict() for w in self.workspace_rules],
-            "last_applied_time": self.last_applied_time
+            "last_applied_time": self.last_applied_time,
         }
 
     @classmethod
@@ -1040,7 +1040,7 @@ class Profile:
             name=d.get("name", ""),
             monitors=[MonitorConfig.from_dict(m) for m in d.get("monitors", [])],
             workspace_rules=[WorkspaceRule.from_dict(w) for w in d.get("workspace_rules", [])],
-            last_applied_time=d.get("last_applied_time", 0)
+            last_applied_time=d.get("last_applied_time", 0.0),
         )
 
     def generate_config(self, use_description: bool = False, use_v2: bool = False) -> str:

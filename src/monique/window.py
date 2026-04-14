@@ -169,7 +169,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._dirty: bool = False
         self._lid_closed: bool = False
         self._app_settings = load_app_settings()
-        self._last_applied_time: float = 0
+        # time of last successful application of curr config (0 = never applied since change)
+        self._last_applied_time: float = 0.0
 
         self._build_ui()
         self._setup_actions()
@@ -725,7 +726,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _on_profile_selected(self, dropdown: Gtk.DropDown, pspec) -> None:
         if self._inhibit_profile_switch:
             return
-        self._last_applied_time = 0
+        self._last_applied_time = 0.0
         sel = dropdown.get_selected()
         if sel == 0:
             # Current = reload from Hyprland
@@ -845,7 +846,7 @@ class MainWindow(Adw.ApplicationWindow):
             name=name,
             monitors=list(self._monitors),
             workspace_rules=list(self._workspace_rules),
-            last_applied_time=self._last_applied_time
+            last_applied_time=self._last_applied_time,
         )
         self._profile_mgr.save(profile)
         self._current_profile_name = name

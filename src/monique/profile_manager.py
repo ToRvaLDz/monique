@@ -152,5 +152,7 @@ class ProfileManager:
 
         # Best Jaccard, fewest missing enabled, most external enabled,
         # most enabled matches, most config matches, latest applied profile time
+        # last_applied_time is a tiebreaker to prefer the most recently used profile
+        # among equally good matches
         candidates.sort(key=lambda c: (c[0], c[1], c[2], c[3], c[4], c[5]), reverse=True)
         return candidates[0][6]
