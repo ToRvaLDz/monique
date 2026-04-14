@@ -696,6 +696,7 @@ class MainWindow(Adw.ApplicationWindow):
                 self._base_profile_name = match.name
                 self._workspace_rules = match.workspace_rules
                 self._inhibit_profile_switch = False
+                self._last_applied_time = match.last_applied_time
                 break
 
     def _select_profile_by_name(self, name: str) -> None:
@@ -885,6 +886,7 @@ class MainWindow(Adw.ApplicationWindow):
     def _mark_dirty(self) -> None:
         """Switch dropdown to (Current) when the user modifies anything."""
         self._dirty = True
+        self._last_applied_time = 0.0 # reset last applied time as config has changed
         if self._inhibit_profile_switch:
             return
         sel = self._profile_dropdown.get_selected()
