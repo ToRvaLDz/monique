@@ -299,6 +299,8 @@ class MonitorDaemon:
                     profile, update_sddm=update_sddm,
                     update_greetd=update_greetd, use_description=use_desc,
                 )
+                profile.last_applied_time = time.time()
+                self._profile_mgr.save(profile)
                 self._last_apply_time = time.monotonic()
                 self._prev_applied_profile = self._last_applied_profile
                 self._last_applied_profile = profile.name
