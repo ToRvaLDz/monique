@@ -615,12 +615,21 @@ class MainWindow(Adw.ApplicationWindow):
         # Niri doesn't support Hyprland-style workspace rules
         if isinstance(self._ipc, NiriIPC):
             return []
-        conf = hyprland_config_dir() / "monitors.conf"
+
+        use_lua = (isinstance(self._ipc, HyprlandIPC)
+                   and self._ipc._version
+                   and (self._ipc._version[0] > 0
+                   or self._ipc._version[1] >= 55))
+        extension = "lua" if use_lua else "conf"
+        conf = hyprland_config_dir() / f"monitors.{extension}"
         if not conf.exists():
             return []
         rules: list[WorkspaceRule] = []
         for line in conf.read_text(encoding="utf-8").splitlines():
-            rule = WorkspaceRule.from_hyprland_line(line)
+            if use_lua:
+                rule = WorkspaceRule.from_hyprland_lua_line(line)
+            else:
+                rule = WorkspaceRule.from_hyprland_line(line)
             if rule:
                 rules.append(rule)
         return rules
@@ -1019,7 +1028,12 @@ class MainWindow(Adw.ApplicationWindow):
         if isinstance(self._ipc, NiriIPC):
             monitors_conf = niri_config_dir() / "monitors.kdl"
         else:
-            monitors_conf = hyprland_config_dir() / "monitors.conf"
+            monitors_conf = hyprland_config_dir() / "monitors.lua"
+            if (isinstance(self._ipc, HyprlandIPC)
+                and self._ipc._version
+                and self._ipc._version[0] == 0
+                and self._ipc._version[1] < 55):
+                monitors_conf = hyprland_config_dir() / "monitors.conf"
 
         # Snapshot workspaces (for revert)
         self._ws_snapshot = self._ipc.get_workspaces()

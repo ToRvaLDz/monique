@@ -521,6 +521,104 @@ class MonitorConfig:
 
         return "monitorv2 {\n" + "\n".join(lines) + "\n}"
 
+    def to_hyprland_lua_block(
+        self,
+        use_description: bool = False,
+        name_to_id: dict[str, str] | None = None,
+    ) -> str:
+        """Generate a ``monitorv2 { … }`` lua-config block for Hyprland >= 0.55."""
+        prefix: str = "hl.monitor({\n"
+        suffix: str = "\n})\n"
+        lines: list[str] = []
+
+        # Output identifier (must be first attribute)
+        if use_description and self.description:
+            lines.append(f"  output = \"desc:{self.description}\"")
+        else:
+            lines.append(f"  output = \"{self.name}\"")
+
+        # Disabled monitor
+        if not self.enabled:
+            lines.append("  disabled = true")
+            return prefix + ",\n".join(lines) + suffix
+
+        # Mode (resolution@refresh)
+        if self.resolution_mode == ResolutionMode.EXPLICIT:
+            refresh = f"{self.refresh_rate:g}"
+            lines.append(f"  mode = \"{self.width}x{self.height}@{refresh}\"")
+        else:
+            lines.append(f"  mode = \"{self.resolution_mode.value}\"")
+
+        # Position
+        if self.position_mode == PositionMode.EXPLICIT:
+            lines.append(f"  position = \"{self.x}x{self.y}\"")
+        else:
+            lines.append(f"  position = \"{self.position_mode.value}\"")
+
+        # Scale
+        if self.scale_mode == ScaleMode.AUTO:
+            lines.append("  scale = \"auto\"")
+        else:
+            lines.append(f"  scale = {self.scale:g}")
+
+        # Transform
+        if self.transform != Transform.NORMAL:
+            lines.append(f"  transform = {self.transform.value}")
+
+        # Mirror
+        if self.mirror_of:
+            mirror_id = self.mirror_of
+            if name_to_id and self.mirror_of in name_to_id:
+                mirror_id = name_to_id[self.mirror_of]
+            lines.append(f"  mirror = \"{mirror_id}\"")
+
+        # Bitdepth
+        if self.bitdepth != 8:
+            lines.append(f"  bitdepth = {self.bitdepth}")
+
+        # VRR
+        if self.vrr != VRR.OFF:
+            lines.append(f"  vrr = {self.vrr.value}")
+
+        # Color management (hdr bool falls back to cm = hdr if no explicit cm set)
+        cm = self.color_management or ("hdr" if self.hdr else "")
+        if cm:
+            lines.append(f"  cm = \"{cm}\"")
+
+        # SDR brightness / saturation
+        if self.sdr_brightness != 1.0:
+            lines.append(f"  sdrbrightness = {self.sdr_brightness:g}")
+        if self.sdr_saturation != 1.0:
+            lines.append(f"  sdrsaturation = {self.sdr_saturation:g}")
+
+        # Reserved area (space-separated in v2)
+        if any((self.reserved_top, self.reserved_bottom,
+                self.reserved_left, self.reserved_right)):
+            lines.append(
+                f"  reserved_area = {{"
+                f" top = {self.reserved_top}, bottom = {self.reserved_bottom}, "
+                f"left = {self.reserved_left}, right = {self.reserved_right} }}"
+            )
+
+        # HDR / EDID Override
+        if self.sdr_eotf != 0:
+            lines.append(f"  sdr_eotf = \"{self.sdr_eotf}\"")
+        if self.supports_hdr != 0:
+            lines.append(f"  supports_hdr = {self.supports_hdr}")
+        if self.supports_wide_color != 0:
+            lines.append(f"  supports_wide_color = {self.supports_wide_color}")
+        if self.sdr_min_luminance != 0.0:
+            lines.append(f"  sdr_min_luminance = {self.sdr_min_luminance:g}")
+        if self.sdr_max_luminance != 0.0:
+            lines.append(f"  sdr_max_luminance = {self.sdr_max_luminance:g}")
+        if self.min_luminance != 0.0:
+            lines.append(f"  min_luminance = {self.min_luminance:g}")
+        if self.max_luminance != 0.0:
+            lines.append(f"  max_luminance = {self.max_luminance:g}")
+        if self.max_avg_luminance != 0.0:
+            lines.append(f"  max_avg_luminance = {self.max_avg_luminance:g}")
+        return prefix + ",\n".join(lines) + suffix
+
     def to_dict(self) -> dict:
         """Serialize to a JSON-friendly dict."""
         d = asdict(self)
@@ -756,7 +854,7 @@ class WorkspaceRule:
     on_created_empty: str = ""
 
     def to_hyprland_line(self, name_to_id: dict[str, str] | None = None) -> str:
-        """Generate a workspace rule line for hyprland.conf."""
+        """Generate a workspace rule line for hyprland.conf, for Hyprland < 0.55."""
         parts: list[str] = [self.workspace]
 
         if self.monitor:
@@ -786,6 +884,41 @@ class WorkspaceRule:
             parts.append(f"on-created-empty:{self.on_created_empty}")
 
         return "workspace=" + ", ".join(parts)
+    
+    def to_hyprland_lua_line(self, name_to_id: dict[str, str] | None = None) -> str:
+        """Generate a workspace rule line for hyprland.lua, for Hyprland >= 0.55."""
+        if self.workspace.isdigit():
+            parts: list[str] = [f"workspace = \"{self.workspace}\""]
+        else:
+            parts: list[str] = [f"workspace = \"name:{self.workspace}\""]
+
+        if self.monitor:
+            monitor_id = (
+                name_to_id[self.monitor]
+                if name_to_id and self.monitor in name_to_id
+                else self.monitor
+            )
+            parts.append(f"monitor = \"{monitor_id}\"")
+        if self.default:
+            parts.append("default = true")
+        if self.persistent:
+            parts.append("persistent = true")
+        if self.rounding >= 0:
+            parts.append(f"no_rounding = {self.rounding == 0}")
+        if self.decorate >= 0:
+            parts.append(f"decorate = {self.decorate == 1}")
+        if self.gapsin >= 0:
+            parts.append(f"gapsin = {self.gapsin}")
+        if self.gapsout >= 0:
+            parts.append(f"gapsout = {self.gapsout}")
+        if self.border >= 0:
+            parts.append(f"no_border = {self.border == 0}")
+        if self.bordersize >= 0:
+            parts.append(f"bordersize = {self.bordersize}")
+        if self.on_created_empty:
+            parts.append(f"on_created_empty = \"{self.on_created_empty}\"")
+
+        return "hl.workspace_rule({ " + ", ".join(parts) + " })"
 
     def to_sway_line(self, name_to_id: dict[str, str] | None = None) -> str:
         """Generate a workspace assignment line for sway config.
@@ -849,6 +982,55 @@ class WorkspaceRule:
                             pass
                         break
 
+        return rule
+    
+    @classmethod
+    def from_hyprland_lua_line(cls, line: str) -> WorkspaceRule | None:
+        """Parse a ``hl.workspace_rule({...`` line from a Hyprland config file."""
+        prefix = "hl.workspace_rule({"
+        line = line.strip()
+        if not line.startswith(prefix):
+            return None
+        line = line[:-2]
+
+        content = line[len(prefix):].strip()
+        parts = [p.strip() for p in content.split(",")]
+        if len(parts) == 0 or len(content) == 0:
+            return None
+
+        _, workspace = map(lambda x:x.strip(),parts[0].split("="))
+        rule = cls(workspace=workspace[1:-1])
+
+        _INT_FIELDS = {
+            "rounding": "rounding",
+            "gapsin": "gapsin",
+            "gapsout": "gapsout",
+            "bordersize": "bordersize",
+        }
+
+        for part in parts[1:]:
+            part = part.strip()
+            key, value = map(lambda x:x.strip(),part.split("="))
+            if key == "monitor":
+                rule.monitor = value[1:-1] # remove "" from lua string
+            elif key == "default" and value.lower() == "true":
+                rule.default = True
+            elif key == "persistent" and value.lower() == "true":
+                rule.persistent = True
+            elif key == "no_border":
+                rule.border = 1 if value.lower() == "false" else 0
+            elif key == "decorate":
+                rule.decorate = 1 if value.lower() == "true" else 0
+            elif key == "on_created_empty":
+                rule.on_created_empty = value
+            else:
+                for prefix, attr in _INT_FIELDS.items():
+                    if key == prefix:
+                        try:
+                            setattr(rule, attr, int(value))
+                        except ValueError:
+                            pass
+                        break
         return rule
 
 
@@ -1043,7 +1225,7 @@ class Profile:
             last_applied_time=d.get("last_applied_time", 0.0),
         )
 
-    def generate_config(self, use_description: bool = False, use_v2: bool = False) -> str:
+    def generate_config(self, use_description: bool = False, used_version: tuple[int,int,int] | None = None) -> str:
         """Generate the full monitors.conf content for Hyprland."""
         # Build name→identifier mapping for workspace rules and mirror references
         name_to_id: dict[str, str] = {}
@@ -1053,10 +1235,25 @@ class Profile:
             else:
                 name_to_id[m.name] = m.name
 
+        use_lua = False
+        use_v2 = False
+        comment_prefix = "# "
+        if used_version and (used_version[0] > 0 or used_version[1] >= 55):
+            use_lua = True
+            comment_prefix = "-- "
+        elif used_version and used_version[0] == 0 and used_version[1] >= 50:
+            use_v2 = True
+
         lines: list[str] = []
-        lines.append("# Generated by Monique — https://github.com/ToRvaLDz/monique")
+        lines.append(f"{comment_prefix} Generated by Monique — https://github.com/ToRvaLDz/monique")
         lines.append("")
-        if use_v2:
+        if use_lua:
+            for m in self.monitors:
+                lines.append(m.to_hyprland_lua_block(
+                    use_description=use_description, name_to_id=name_to_id,
+                ))
+                lines.append("")
+        elif use_v2:
             for m in self.monitors:
                 lines.append(m.to_hyprland_v2_block(
                     use_description=use_description, name_to_id=name_to_id,
@@ -1069,8 +1266,12 @@ class Profile:
                 ))
         if self.workspace_rules:
             lines.append("")
-            for w in self.workspace_rules:
-                lines.append(w.to_hyprland_line(name_to_id=name_to_id))
+            if use_lua:
+                for w in self.workspace_rules:
+                    lines.append(w.to_hyprland_lua_line(name_to_id=name_to_id))
+            else:
+                for w in self.workspace_rules:
+                    lines.append(w.to_hyprland_line(name_to_id=name_to_id))
         lines.append("")
         return "\n".join(lines)
 

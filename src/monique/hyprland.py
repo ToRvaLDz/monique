@@ -190,12 +190,17 @@ class HyprlandIPC:
         conf_dir = hyprland_config_dir()
         monitors_conf = conf_dir / "monitors.conf"
 
+        print(self._version)
+
+        if self._version and (self._version[0] > 0 or self._version[1] >= 55):
+            monitors_conf = conf_dir / "monitors.lua"
+
         # Backup existing
         backup_file(monitors_conf)
 
         # Write new config (monitorv2 blocks for Hyprland >= 0.50)
         write_text(monitors_conf, profile.generate_config(
-            use_description=use_description, use_v2=self.supports_v2,
+            use_description=use_description, used_version=self._version,
         ))
 
         # Also write Sway config if Sway is installed
