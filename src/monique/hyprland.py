@@ -190,8 +190,6 @@ class HyprlandIPC:
         conf_dir = hyprland_config_dir()
         monitors_conf = conf_dir / "monitors.conf"
 
-        print(self._version)
-
         if self._version and (self._version[0] > 0 or self._version[1] >= 55):
             monitors_conf = conf_dir / "monitors.lua"
 
