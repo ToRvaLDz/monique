@@ -166,7 +166,7 @@ class MonitorDaemon:
         finally:
             loop.remove_reader(monitor.fileno())
 
-    def _schedule_apply(self, ipc: HyprlandIPC | NiriIPC | SwayIPC) -> None:
+    def _schedule_apply(self, ipc: HyprlandIPC | NiriIPC | SwayIPC, *, force: bool = False) -> None:
         """Debounce monitor events before applying."""
         loop = asyncio.get_event_loop()
         if self._debounce_handle:
@@ -180,7 +180,7 @@ class MonitorDaemon:
                 log.debug("udev settle: %.1fs remaining, deferring", remaining)
                 self._debounce_handle = loop.call_later(
                     remaining,
-                    lambda: asyncio.ensure_future(self._apply_best_profile(ipc)),
+                    lambda f=force: asyncio.ensure_future(self._apply_best_profile(ipc, force=f)),
                 )
                 return
             debounce_ms = DEBOUNCE_MS
@@ -193,7 +193,7 @@ class MonitorDaemon:
                 remaining = settle_s - elapsed
                 self._debounce_handle = loop.call_later(
                     remaining,
-                    lambda: asyncio.ensure_future(self._apply_best_profile(ipc)),
+                    lambda f=force: asyncio.ensure_future(self._apply_best_profile(ipc, force=f)),
                 )
                 return
             debounce_ms = NIRI_DEBOUNCE_MS
@@ -202,7 +202,7 @@ class MonitorDaemon:
 
         self._debounce_handle = loop.call_later(
             debounce_ms / 1000.0,
-            lambda: asyncio.ensure_future(self._apply_best_profile(ipc)),
+            lambda f=force: asyncio.ensure_future(self._apply_best_profile(ipc, force=f)),
         )
 
     async def _apply_best_profile(self, ipc: HyprlandIPC | NiriIPC | SwayIPC, *, force: bool = False) -> None:
@@ -430,7 +430,7 @@ class MonitorDaemon:
             self._lid_closed = closed
             if self._ipc and self._asyncio_loop:
                 self._asyncio_loop.call_soon_threadsafe(
-                    self._schedule_apply, self._ipc,
+                    lambda: self._schedule_apply(self._ipc, force=True),
                 )
 
         thread = threading.Thread(target=_run, daemon=True, name="lid-monitor")

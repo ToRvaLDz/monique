@@ -689,6 +689,11 @@ class MonitorConfig:
             transform=Transform(data.get("transform", 0)),
             enabled=not disabled,
             vrr=vrr_val,
+            color_management=data.get("colorManagementPreset", ""),
+            sdr_brightness=data.get("sdrBrightness", 1.0),
+            sdr_saturation=data.get("sdrSaturation", 1.0),
+            sdr_min_luminance=data.get("sdrMinLuminance", 0.0),
+            sdr_max_luminance=data.get("sdrMaxLuminance", 0.0),
         )
 
     @classmethod

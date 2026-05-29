@@ -43,7 +43,7 @@ jobs:
           python -c "from monique import models; print('models OK')"
           python -c "from monique import utils; print('utils OK')"
           python -c "from monique import profile_manager; print('profile_manager OK')"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: matrix.python-version == '3.12'
         with:
           name: wheel
