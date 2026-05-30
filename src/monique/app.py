@@ -99,7 +99,7 @@ def main() -> None:
     parser.add_argument(
         "--config-dir",
         metavar="PATH",
-        help="Override output directory for monitors.conf",
+        help="Override output directory for generated monitor config files",
     )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(

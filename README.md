@@ -78,7 +78,7 @@
 - **Clamshell mode** — disable the internal laptop display when external monitors are connected (manual toggle in the toolbar or automatic via daemon preferences); the daemon also monitors the lid state via UPower D-Bus
 - **Confirm-or-revert** — 10-second countdown after applying, auto-reverts if display is unusable
 - **CLI interface** — list, query, and switch profiles from the terminal (`--list-profiles`, `--current-profile`, `--switch-profile`), perfect for hotkey bindings
-- **Custom config directory** — write `monitors.conf` to a custom path instead of the compositor default (via Preferences or `--config-dir`)
+- **Custom config directory** — write generated monitor config files to a custom path instead of the compositor default (via Preferences or `--config-dir`)
 - **Active profile tracking** — the last applied profile is persisted across GUI, CLI, and daemon, queryable via `--current-profile`
 
 ## Installation
@@ -249,9 +249,12 @@ All configuration is stored in `~/.config/monique/`:
 ```
 
 Monitor config files are written to the compositor's config directory:
-- **Hyprland:** `~/.config/hypr/monitors.conf`
+- **Hyprland:** `~/.config/hypr/monitors.conf` and `~/.config/hypr/monitors.lua`
 - **Sway:** `~/.config/sway/monitors.conf`
 - **Niri:** `~/.config/niri/monitors.kdl`
+
+For Hyprland's legacy hyprlang config, add `source = ~/.config/hypr/monitors.conf` to `hyprland.conf`.
+For Hyprland 0.55+ Lua config, add `require("monitors")` to `hyprland.lua`.
 
 To use a custom output directory, set it in **Preferences → Config Output** or pass `--config-dir` on the command line.
 

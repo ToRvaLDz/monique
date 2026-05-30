@@ -189,13 +189,18 @@ class HyprlandIPC:
         """Write monitor config and reload Hyprland."""
         conf_dir = hyprland_config_dir()
         monitors_conf = conf_dir / "monitors.conf"
+        monitors_lua = conf_dir / "monitors.lua"
 
         # Backup existing
         backup_file(monitors_conf)
+        backup_file(monitors_lua)
 
-        # Write new config (monitorv2 blocks for Hyprland >= 0.50)
+        # Write both legacy hyprlang and Hyprland >= 0.55 Lua configs.
         write_text(monitors_conf, profile.generate_config(
             use_description=use_description, use_v2=self.supports_v2,
+        ))
+        write_text(monitors_lua, profile.generate_lua_config(
+            use_description=use_description,
         ))
 
         # Also write Sway config if Sway is installed

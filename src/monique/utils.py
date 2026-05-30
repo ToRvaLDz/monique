@@ -46,7 +46,7 @@ def is_niri_installed() -> bool:
 
 
 def _config_dir_override() -> Path | None:
-    """Restituisce il percorso personalizzato per monitors.conf, se configurato.
+    """Restituisce il percorso personalizzato per i file monitor, se configurato.
 
     Priorità: --config-dir (runtime) > settings.json > default del compositor.
     """

@@ -165,6 +165,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._current_profile_name: str = ""
         self._base_profile_name: str = ""  # profile before user edits (for revert)
         self._confirm_timer_id: int = 0
+        self._confirm_created_paths: list[Path] = []
         self._inhibit_profile_switch: bool = False
         self._osd: MonitorOSD | None = None
         self._dirty: bool = False
@@ -370,7 +371,7 @@ class MainWindow(Adw.ApplicationWindow):
         # ── Output Directory group ──
         grp_out = Adw.PreferencesGroup(
             title="Config Output",
-            description="Where monitors.conf is written (leave empty for compositor default)",
+            description="Where generated monitor config files are written (leave empty for compositor default)",
         )
         page.add(grp_out)
 
@@ -1017,16 +1018,22 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Determine config path based on compositor
         if isinstance(self._ipc, NiriIPC):
-            monitors_conf = niri_config_dir() / "monitors.kdl"
+            config_paths = [niri_config_dir() / "monitors.kdl"]
         else:
-            monitors_conf = hyprland_config_dir() / "monitors.conf"
+            config_paths = [
+                hyprland_config_dir() / "monitors.conf",
+                hyprland_config_dir() / "monitors.lua",
+            ]
 
         # Snapshot workspaces (for revert)
         self._ws_snapshot = self._ipc.get_workspaces()
         self._migrated_workspaces: list[tuple[str, str]] = []
 
+        created_paths = [path for path in config_paths if not path.exists()]
+
         # Backup
-        backup_file(monitors_conf)
+        for path in config_paths:
+            backup_file(path)
 
         try:
             update_sddm = self._app_settings.get("update_sddm", True)
@@ -1039,7 +1046,9 @@ class MainWindow(Adw.ApplicationWindow):
             self._set_status("Configuration applied")
         except Exception as e:
             self._toast(f"Apply failed: {e}")
-            restore_backup(monitors_conf)
+            for path in config_paths:
+                if not restore_backup(path) and path in created_paths and path.exists():
+                    path.unlink()
             return
 
         # Migrate orphaned workspaces if setting is on (Niri handles this natively)
@@ -1047,7 +1056,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._migrate_orphaned_workspaces(profile)
 
         # Show confirmation dialog with countdown
-        self._show_confirm_dialog(monitors_conf)
+        self._show_confirm_dialog(config_paths, created_paths)
 
     def _migrate_orphaned_workspaces(self, profile: Profile) -> None:
         """Move workspaces from disabled/removed monitors to the primary monitor."""
@@ -1069,7 +1078,7 @@ class MainWindow(Adw.ApplicationWindow):
                 except Exception:
                     pass
 
-    def _show_confirm_dialog(self, conf_path) -> None:
+    def _show_confirm_dialog(self, conf_paths, created_paths) -> None:
         self._confirm_remaining = CONFIRM_TIMEOUT
         dialog = Adw.AlertDialog()
         dialog.set_heading("Keep Settings?")
@@ -1082,7 +1091,8 @@ class MainWindow(Adw.ApplicationWindow):
         dialog.set_close_response("revert")
 
         self._confirm_dialog = dialog
-        self._confirm_conf_path = conf_path
+        self._confirm_conf_paths = list(conf_paths)
+        self._confirm_created_paths = list(created_paths)
 
         # Start countdown
         self._confirm_timer_id = GLib.timeout_add(1000, self._confirm_tick)
@@ -1106,9 +1116,11 @@ class MainWindow(Adw.ApplicationWindow):
 
         if response == "keep":
             # Remove backup
-            bak = self._confirm_conf_path.with_suffix(self._confirm_conf_path.suffix + ".bak")
-            if bak.exists():
-                bak.unlink()
+            for path in self._confirm_conf_paths:
+                bak = path.with_suffix(path.suffix + ".bak")
+                if bak.exists():
+                    bak.unlink()
+            self._confirm_created_paths = []
             self._migrated_workspaces = []
             self._base_profile_name = self._current_profile_name
             self._last_applied_time = time.time()
@@ -1131,7 +1143,16 @@ class MainWindow(Adw.ApplicationWindow):
                 pass
         self._migrated_workspaces = []
 
-        if restore_backup(self._confirm_conf_path):
+        restored = False
+        for path in self._confirm_conf_paths:
+            if restore_backup(path):
+                restored = True
+            elif path in self._confirm_created_paths and path.exists():
+                path.unlink()
+                restored = True
+        self._confirm_created_paths = []
+
+        if restored:
             try:
                 self._ipc.reload()
             except Exception as e:

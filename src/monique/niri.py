@@ -184,8 +184,11 @@ class NiriIPC:
         # Cross-write Hyprland config if Hyprland is installed
         if is_hyprland_installed():
             hypr_conf = hyprland_config_dir() / "monitors.conf"
+            hypr_lua = hyprland_config_dir() / "monitors.lua"
             backup_file(hypr_conf)
+            backup_file(hypr_lua)
             write_text(hypr_conf, profile.generate_config(use_description=use_description))
+            write_text(hypr_lua, profile.generate_lua_config(use_description=use_description))
 
         # Cross-write Sway config if Sway is installed
         if is_sway_installed():
