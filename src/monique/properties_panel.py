@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
-from gi.repository import Gtk, Adw, GLib, GObject
+from gi.repository import Gtk, Adw, GLib, GObject, Gio
 
 from .models import (
     MonitorConfig, ResolutionMode, PositionMode, ScaleMode,
@@ -62,6 +64,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._monitor: MonitorConfig | None = None
         self._building = False
         self._backend: str = "hyprland"  # "hyprland", "sway", or "niri"
+        self._hyprland_icc: bool = False
 
         self._build_ui()
 
@@ -189,6 +192,17 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._combo_cm.connect("notify::selected", self._on_changed)
         self._grp_adv.add(self._combo_cm)
 
+        self._entry_icc = Adw.EntryRow(title="ICC Profile (Hyprland v0.55+)")
+        self._entry_icc.set_input_hints(Gtk.InputHints.NO_SPELLCHECK)
+        self._entry_icc.set_input_purpose(Gtk.InputPurpose.URL)
+        self._entry_icc.connect("changed", self._on_changed)
+        btn_icc = Gtk.Button(icon_name="document-open-symbolic")
+        btn_icc.set_valign(Gtk.Align.CENTER)
+        btn_icc.set_tooltip_text("Choose ICC profile")
+        btn_icc.connect("clicked", self._on_pick_icc_clicked)
+        self._entry_icc.add_suffix(btn_icc)
+        self._grp_adv.add(self._entry_icc)
+
         self._spin_sdr_bright = Adw.SpinRow.new_with_range(0.0, 5.0, 0.05)
         self._spin_sdr_bright.set_title("SDR Brightness")
         self._spin_sdr_bright.set_digits(2)
@@ -295,18 +309,25 @@ class PropertiesPanel(Adw.PreferencesPage):
         # Default to insensitive
         self._grp_hdr.set_sensitive(False)
 
-    def set_compositor(self, backend: str, hyprland_v2: bool = False) -> None:
+    def set_compositor(
+        self,
+        backend: str,
+        hyprland_v2: bool = False,
+        hyprland_icc: bool = False,
+    ) -> None:
         """Disable controls not supported by the active compositor.
 
         backend should be "hyprland", "sway", or "niri".
         """
         self._backend = backend
+        self._hyprland_icc = hyprland_icc
         is_hyprland = backend == "hyprland"
 
         # Hyprland-only Advanced controls
         self._combo_mirror.set_sensitive(is_hyprland)
         self._combo_bitdepth.set_sensitive(is_hyprland)
         self._combo_cm.set_sensitive(is_hyprland)
+        self._entry_icc.set_sensitive(is_hyprland and hyprland_icc)
         self._spin_sdr_bright.set_sensitive(is_hyprland)
         self._spin_sdr_sat.set_sensitive(is_hyprland)
 
@@ -347,6 +368,7 @@ class PropertiesPanel(Adw.PreferencesPage):
 
         # HDR / EDID Override: only for Hyprland >= 0.50
         self._grp_hdr.set_sensitive(is_hyprland and hyprland_v2)
+        self._update_icc_validation()
 
     def set_enabled_locked(self, locked: bool) -> None:
         """Lock the Enabled switch (e.g. for clamshell-managed monitors)."""
@@ -446,6 +468,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         cm_val = monitor.color_management or "None"
         idx = cm_options.index(cm_val) if cm_val in cm_options else 0
         self._combo_cm.set_selected(idx)
+        self._entry_icc.set_text(monitor.icc_profile)
 
         self._spin_sdr_bright.set_value(monitor.sdr_brightness)
         self._spin_sdr_sat.set_value(monitor.sdr_saturation)
@@ -468,6 +491,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_max_avg_lum.set_value(monitor.max_avg_luminance)
 
         self._building = False
+        self._update_icc_validation()
 
     def _apply_to_monitor(self) -> None:
         """Write current UI values back to the MonitorConfig."""
@@ -515,6 +539,8 @@ class PropertiesPanel(Adw.PreferencesPage):
 
         cm_options = ["", "auto", "srgb", "dcip3", "dp3", "adobe", "wide", "edid", "hdr", "hdredid"]
         m.color_management = cm_options[self._combo_cm.get_selected()]
+        icc_profile = self._entry_icc.get_text().strip()
+        m.icc_profile = icc_profile if not icc_profile or Path(icc_profile).is_absolute() else ""
 
         m.sdr_brightness = round(self._spin_sdr_bright.get_value(), 2)
         m.sdr_saturation = round(self._spin_sdr_sat.get_value(), 2)
@@ -552,8 +578,24 @@ class PropertiesPanel(Adw.PreferencesPage):
     def _on_changed(self, *args) -> None:
         if self._building or self._monitor is None:
             return
+        self._update_icc_validation()
         self._apply_to_monitor()
         self.emit("property-changed")
+
+    def _update_icc_validation(self) -> None:
+        icc_profile = self._entry_icc.get_text().strip()
+        is_valid = not icc_profile or Path(icc_profile).is_absolute()
+
+        if is_valid:
+            self._entry_icc.remove_css_class("error")
+            if self._backend == "hyprland" and not self._hyprland_icc:
+                self._entry_icc.set_tooltip_text("Requires Hyprland 0.55 or newer")
+            else:
+                self._entry_icc.set_tooltip_text(None)
+            return
+
+        self._entry_icc.add_css_class("error")
+        self._entry_icc.set_tooltip_text("ICC profile path must be absolute")
 
     def _on_res_mode_changed(self, *args) -> None:
         if self._building:
@@ -596,6 +638,47 @@ class PropertiesPanel(Adw.PreferencesPage):
         mode = self._combo_enum_value(self._combo_scale_mode, ScaleMode, ScaleMode.EXPLICIT)
         self._spin_scale.set_visible(mode == ScaleMode.EXPLICIT)
         self._on_changed()
+
+    def _on_pick_icc_clicked(self, *args) -> None:
+        chooser = Gtk.FileChooserNative.new(
+            "Choose ICC Profile",
+            self.get_root(),
+            Gtk.FileChooserAction.OPEN,
+            "Open",
+            "Cancel",
+        )
+
+        filter_icc = Gtk.FileFilter()
+        filter_icc.set_name("ICC profiles")
+        filter_icc.add_pattern("*.icc")
+        filter_icc.add_pattern("*.icm")
+        filter_icc.add_pattern("*.ICC")
+        filter_icc.add_pattern("*.ICM")
+        chooser.add_filter(filter_icc)
+
+        filter_all = Gtk.FileFilter()
+        filter_all.set_name("All files")
+        filter_all.add_pattern("*")
+        chooser.add_filter(filter_all)
+        chooser.set_filter(filter_icc)
+
+        current_path = self._entry_icc.get_text().strip()
+        if current_path:
+            current_file = Gio.File.new_for_path(current_path)
+            if current_file.query_exists(None):
+                chooser.set_file(current_file)
+
+        chooser.connect("response", self._on_icc_file_response)
+        chooser.show()
+
+    def _on_icc_file_response(self, chooser: Gtk.FileChooserNative, response: int) -> None:
+        if response == Gtk.ResponseType.ACCEPT:
+            file = chooser.get_file()
+            if file is not None:
+                path = file.get_path()
+                if path:
+                    self._entry_icc.set_text(path)
+        chooser.destroy()
 
     @staticmethod
     def _find_combo_index(combo: Adw.ComboRow, value: str) -> int:

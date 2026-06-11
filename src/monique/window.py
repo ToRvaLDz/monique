@@ -272,6 +272,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._props.set_compositor(
                 "hyprland",
                 hyprland_v2=self._ipc.supports_v2,
+                hyprland_icc=self._ipc.supports_icc,
             )
         self._props.connect("property-changed", self._on_property_changed)
         scroll.set_child(self._props)

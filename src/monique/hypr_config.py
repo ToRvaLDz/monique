@@ -45,6 +45,7 @@ def write_hyprland_configs(
     fmt: str | None = None,
     use_description: bool = False,
     use_v2: bool = False,
+    supports_icc: bool = False,
 ) -> list[Path]:
     """Back up and write the Hyprland monitor configs, returning the paths written."""
     fmt = _resolve_format(fmt)
@@ -55,7 +56,9 @@ def write_hyprland_configs(
         monitors_conf = conf_dir / "monitors.conf"
         backup_file(monitors_conf)
         write_text(monitors_conf, profile.generate_config(
-            use_description=use_description, use_v2=use_v2,
+            use_description=use_description,
+            use_v2=use_v2,
+            supports_icc=supports_icc,
         ))
         written.append(monitors_conf)
 

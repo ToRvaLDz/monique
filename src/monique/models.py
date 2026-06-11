@@ -161,6 +161,7 @@ class MonitorConfig:
     bitdepth: int = 8           # 8 or 10
     vrr: VRR = VRR.OFF
     color_management: str = ""  # "", "srgb", "dcip3", "dp3", "adobe", "wide", "edid", "hdr", "hdredid"
+    icc_profile: str = ""       # Absolute path, Hyprland newer monitorv2 / Lua configs
     sdr_brightness: float = 1.0
     sdr_saturation: float = 1.0
 
@@ -404,6 +405,7 @@ class MonitorConfig:
         self,
         use_description: bool = False,
         name_to_id: dict[str, str] | None = None,
+        supports_icc: bool = True,
     ) -> str:
         """Generate the `monitor=...` config line for hyprland.conf."""
         parts: list[str] = []
@@ -456,7 +458,9 @@ class MonitorConfig:
         if self.vrr != VRR.OFF:
             extras.append(f"vrr, {self.vrr.value}")
 
-        if self.color_management:
+        if supports_icc and self.icc_profile:
+            extras.append(f"icc, {self.icc_profile}")
+        elif self.color_management:
             extras.append(f"cm, {self.color_management}")
 
         if self.sdr_brightness != 1.0:
@@ -481,6 +485,7 @@ class MonitorConfig:
         self,
         use_description: bool = False,
         name_to_id: dict[str, str] | None = None,
+        supports_icc: bool = True,
     ) -> str:
         """Generate a ``monitorv2 { … }`` config block for Hyprland >= 0.50."""
         lines: list[str] = []
@@ -534,10 +539,13 @@ class MonitorConfig:
         if self.vrr != VRR.OFF:
             lines.append(f"  vrr = {self.vrr.value}")
 
-        # Color management (hdr bool falls back to cm = hdr if no explicit cm set)
-        cm = self.color_management or ("hdr" if self.hdr else "")
-        if cm:
-            lines.append(f"  cm = {cm}")
+        # ICC overrides CM presets on newer Hyprland versions.
+        if supports_icc and self.icc_profile:
+            lines.append(f"  icc = {self.icc_profile}")
+        else:
+            cm = self.color_management or ("hdr" if self.hdr else "")
+            if cm:
+                lines.append(f"  cm = {cm}")
 
         # SDR brightness / saturation
         if self.sdr_brightness != 1.0:
@@ -577,6 +585,7 @@ class MonitorConfig:
         self,
         use_description: bool = False,
         name_to_id: dict[str, str] | None = None,
+        supports_icc: bool = True,
     ) -> str:
         """Generate an ``hl.monitor({ ... })`` block for Hyprland >= 0.55."""
         lines: list[str] = ["hl.monitor({"]
@@ -624,9 +633,12 @@ class MonitorConfig:
         if self.vrr != VRR.OFF:
             lines.append(_lua_field("vrr", self.vrr.value))
 
-        cm = self.color_management or ("hdr" if self.hdr else "")
-        if cm:
-            lines.append(_lua_field("cm", cm))
+        if supports_icc and self.icc_profile:
+            lines.append(_lua_field("icc", self.icc_profile))
+        else:
+            cm = self.color_management or ("hdr" if self.hdr else "")
+            if cm:
+                lines.append(_lua_field("cm", cm))
 
         if self.sdr_brightness != 1.0:
             lines.append(_lua_field("sdrbrightness", self.sdr_brightness))
@@ -732,6 +744,7 @@ class MonitorConfig:
             enabled=not disabled,
             vrr=vrr_val,
             color_management=data.get("colorManagementPreset", ""),
+            icc_profile=data.get("iccProfile", data.get("icc", "")),
             sdr_brightness=data.get("sdrBrightness", 1.0),
             sdr_saturation=data.get("sdrSaturation", 1.0),
             sdr_min_luminance=data.get("sdrMinLuminance", 0.0),
@@ -1270,7 +1283,12 @@ class Profile:
             last_applied_time=d.get("last_applied_time", 0.0),
         )
 
-    def generate_config(self, use_description: bool = False, use_v2: bool = False) -> str:
+    def generate_config(
+        self,
+        use_description: bool = False,
+        use_v2: bool = False,
+        supports_icc: bool = True,
+    ) -> str:
         """Generate the full monitors.conf content for Hyprland."""
         # Build name→identifier mapping for workspace rules and mirror references
         name_to_id: dict[str, str] = {}
@@ -1286,13 +1304,17 @@ class Profile:
         if use_v2:
             for m in self.monitors:
                 lines.append(m.to_hyprland_v2_block(
-                    use_description=use_description, name_to_id=name_to_id,
+                    use_description=use_description,
+                    name_to_id=name_to_id,
+                    supports_icc=supports_icc,
                 ))
                 lines.append("")
         else:
             for m in self.monitors:
                 lines.append(m.to_hyprland_line(
-                    use_description=use_description, name_to_id=name_to_id,
+                    use_description=use_description,
+                    name_to_id=name_to_id,
+                    supports_icc=supports_icc,
                 ))
         if self.workspace_rules:
             lines.append("")
@@ -1301,7 +1323,7 @@ class Profile:
         lines.append("")
         return "\n".join(lines)
 
-    def generate_lua_config(self, use_description: bool = False) -> str:
+    def generate_lua_config(self, use_description: bool = False, supports_icc: bool = True) -> str:
         """Generate the full monitors.lua content for Hyprland >= 0.55."""
         name_to_id: dict[str, str] = {}
         for m in self.monitors:
@@ -1313,7 +1335,9 @@ class Profile:
         blocks: list[str] = ["-- Generated by Monique - https://github.com/ToRvaLDz/monique"]
         for m in self.monitors:
             blocks.append(m.to_hyprland_lua_block(
-                use_description=use_description, name_to_id=name_to_id,
+                use_description=use_description,
+                name_to_id=name_to_id,
+                supports_icc=supports_icc,
             ))
         if self.workspace_rules:
             blocks.append("\n".join(

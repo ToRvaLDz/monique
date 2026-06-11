@@ -33,6 +33,7 @@ class HyprlandIPC:
         self._runtime = hyprland_runtime_dir()
         self._version: tuple[int, int, int] | None = None
         self._supports_v2: bool | None = None
+        self._supports_icc: bool | None = None
 
     def get_version(self) -> tuple[int, int, int]:
         """Return the Hyprland version as (major, minor, patch).
@@ -63,6 +64,13 @@ class HyprlandIPC:
         if self._supports_v2 is None:
             self._supports_v2 = self.get_version() >= (0, 50, 0)
         return self._supports_v2
+
+    @property
+    def supports_icc(self) -> bool:
+        """True if the running Hyprland supports monitor ICC profiles (>= 0.55)."""
+        if self._supports_icc is None:
+            self._supports_icc = self.get_version() >= (0, 55, 0)
+        return self._supports_icc
 
     @property
     def command_socket(self) -> Path:
@@ -197,6 +205,7 @@ class HyprlandIPC:
         write_hyprland_configs(
             profile, fmt=hypr_config_format,
             use_description=use_description, use_v2=self.supports_v2,
+            supports_icc=self.supports_icc,
         )
 
         # Also write Sway config if Sway is installed
@@ -238,7 +247,9 @@ class HyprlandIPC:
         if self.supports_v2:
             for m in profile.monitors:
                 block = m.to_hyprland_v2_block(
-                    use_description=use_description, name_to_id=name_to_id,
+                    use_description=use_description,
+                    name_to_id=name_to_id,
+                    supports_icc=self.supports_icc,
                 )
                 # Strip "monitorv2 {" and "}" to get inner content,
                 # then send each line as a keyword command
@@ -255,7 +266,9 @@ class HyprlandIPC:
         else:
             for m in profile.monitors:
                 line = m.to_hyprland_line(
-                    use_description=use_description, name_to_id=name_to_id,
+                    use_description=use_description,
+                    name_to_id=name_to_id,
+                    supports_icc=self.supports_icc,
                 )
                 # strip "monitor=" prefix for keyword command
                 value = line.removeprefix("monitor=")
