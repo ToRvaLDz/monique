@@ -405,7 +405,6 @@ class MonitorConfig:
         self,
         use_description: bool = False,
         name_to_id: dict[str, str] | None = None,
-        supports_icc: bool = True,
     ) -> str:
         """Generate the `monitor=...` config line for hyprland.conf."""
         parts: list[str] = []
@@ -458,9 +457,7 @@ class MonitorConfig:
         if self.vrr != VRR.OFF:
             extras.append(f"vrr, {self.vrr.value}")
 
-        if supports_icc and self.icc_profile:
-            extras.append(f"icc, {self.icc_profile}")
-        elif self.color_management:
+        if self.color_management:
             extras.append(f"cm, {self.color_management}")
 
         if self.sdr_brightness != 1.0:
@@ -485,7 +482,7 @@ class MonitorConfig:
         self,
         use_description: bool = False,
         name_to_id: dict[str, str] | None = None,
-        supports_icc: bool = True,
+        supports_icc: bool = False,
     ) -> str:
         """Generate a ``monitorv2 { … }`` config block for Hyprland >= 0.50."""
         lines: list[str] = []
@@ -585,7 +582,6 @@ class MonitorConfig:
         self,
         use_description: bool = False,
         name_to_id: dict[str, str] | None = None,
-        supports_icc: bool = True,
     ) -> str:
         """Generate an ``hl.monitor({ ... })`` block for Hyprland >= 0.55."""
         lines: list[str] = ["hl.monitor({"]
@@ -633,7 +629,7 @@ class MonitorConfig:
         if self.vrr != VRR.OFF:
             lines.append(_lua_field("vrr", self.vrr.value))
 
-        if supports_icc and self.icc_profile:
+        if self.icc_profile:
             lines.append(_lua_field("icc", self.icc_profile))
         else:
             cm = self.color_management or ("hdr" if self.hdr else "")
@@ -1287,7 +1283,7 @@ class Profile:
         self,
         use_description: bool = False,
         use_v2: bool = False,
-        supports_icc: bool = True,
+        supports_icc: bool = False,
     ) -> str:
         """Generate the full monitors.conf content for Hyprland."""
         # Build name→identifier mapping for workspace rules and mirror references
@@ -1314,7 +1310,6 @@ class Profile:
                 lines.append(m.to_hyprland_line(
                     use_description=use_description,
                     name_to_id=name_to_id,
-                    supports_icc=supports_icc,
                 ))
         if self.workspace_rules:
             lines.append("")
@@ -1323,7 +1318,7 @@ class Profile:
         lines.append("")
         return "\n".join(lines)
 
-    def generate_lua_config(self, use_description: bool = False, supports_icc: bool = True) -> str:
+    def generate_lua_config(self, use_description: bool = False) -> str:
         """Generate the full monitors.lua content for Hyprland >= 0.55."""
         name_to_id: dict[str, str] = {}
         for m in self.monitors:
@@ -1337,7 +1332,6 @@ class Profile:
             blocks.append(m.to_hyprland_lua_block(
                 use_description=use_description,
                 name_to_id=name_to_id,
-                supports_icc=supports_icc,
             ))
         if self.workspace_rules:
             blocks.append("\n".join(

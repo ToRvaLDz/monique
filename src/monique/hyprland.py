@@ -268,7 +268,6 @@ class HyprlandIPC:
                 line = m.to_hyprland_line(
                     use_description=use_description,
                     name_to_id=name_to_id,
-                    supports_icc=self.supports_icc,
                 )
                 # strip "monitor=" prefix for keyword command
                 value = line.removeprefix("monitor=")
