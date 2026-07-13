@@ -10,7 +10,9 @@
 
       forEachSystem =
         perSystem:
-        lib.genAttrs lib.platforms.linux (system: perSystem nixpkgs.legacyPackages.${system} system);
+        lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (
+          system: perSystem nixpkgs.legacyPackages.${system} system
+        );
     in
     {
       overlays.default = final: _prev: {

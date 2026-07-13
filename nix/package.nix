@@ -47,7 +47,10 @@ python3Packages.buildPythonPackage {
     description = "MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland and Sway";
     homepage = "https://github.com/ToRvaLDz/monique";
     license = lib.licenses.gpl3Plus;
-    platforms = lib.platforms.linux;
+    platforms = [
+      "x86_64-linux"
+      "aarch64-linux"
+    ];
     mainProgram = "monique";
   };
 }
