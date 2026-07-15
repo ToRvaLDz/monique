@@ -44,7 +44,7 @@ python3Packages.buildPythonPackage {
   doCheck = false;
 
   meta = {
-    description = "MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland and Sway";
+    description = "MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland, Sway and Niri";
     homepage = "https://github.com/ToRvaLDz/monique";
     license = lib.licenses.gpl3Plus;
     platforms = [
