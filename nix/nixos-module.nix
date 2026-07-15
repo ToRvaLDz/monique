@@ -31,6 +31,8 @@ in
   config = lib.mkIf cfg.enable {
     environment.systemPackages = lib.optional (cfg.package != null) cfg.package;
 
+    security.polkit.enable = lib.mkDefault cfg.enablePolkit;
+
     environment.etc."polkit-1/rules.d/60-com.github.monique.rules" = lib.mkIf cfg.enablePolkit {
       text = ''
         polkit.addRule(function(action, subject) {
