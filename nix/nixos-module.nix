@@ -30,6 +30,8 @@ in
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package ];
 
+    systemd.packages = [ cfg.package ];
+
     security.polkit.enable = lib.mkDefault cfg.enablePolkit;
 
     environment.etc."polkit-1/rules.d/60-com.github.monique.rules" = lib.mkIf cfg.enablePolkit {
