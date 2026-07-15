@@ -12,8 +12,7 @@ in
     enable = lib.mkEnableOption "Monique monitor configurator";
 
     package = lib.mkOption {
-      type = lib.types.nullOr lib.types.package;
-      default = null;
+      type = lib.types.package;
       description = "The Monique package to install.";
     };
 
@@ -29,7 +28,7 @@ in
   };
 
   config = lib.mkIf cfg.enable {
-    environment.systemPackages = lib.optional (cfg.package != null) cfg.package;
+    environment.systemPackages = [ cfg.package ];
 
     security.polkit.enable = lib.mkDefault cfg.enablePolkit;
 
