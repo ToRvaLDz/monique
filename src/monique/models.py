@@ -325,6 +325,22 @@ class MonitorConfig:
         body = "\n".join(lines)
         return f"output {identifier} {{\n{body}\n}}"
 
+    def niri_native_description(self) -> str | None:
+        """Rebuild the output identifier the way Niri spells it.
+
+        Niri names outputs ``"<make> <model> <serial>"``, wraps three-letter
+        PNP vendor IDs as ``PNP(XXX)`` and writes ``Unknown`` when the EDID
+        exposes no serial.  Returns None when there is no make to rebuild from.
+        """
+        if not self.make:
+            return None
+        make = self.make
+        # Niri hands PNP IDs over already wrapped; Hyprland and Sway do not.
+        if len(make) == 3 and make.isalpha() and make.isupper():
+            make = f"PNP({make})"
+        serial = self.serial or "Unknown"
+        return " ".join(p for p in (make, self.model, serial) if p)
+
     def to_niri_block(
         self, use_description: bool = False,
         niri_ids: dict[str, str] | None = None,
@@ -339,20 +355,15 @@ class MonitorConfig:
         if use_description and self.description:
             if niri_ids and self.description in niri_ids:
                 identifier = f'"{niri_ids[self.description]}"'
-            elif niri_ids is None and self.make:
-                # No Niri IPC available (cross-write from another compositor).
-                # Reconstruct the Niri-native description from make/model/serial.
-                # Match primarily by serial; fall back to model if unavailable.
-                make = self.make
-                if len(make) == 3 and make.isalpha() and make.isupper():
-                    make = f"PNP({make})"
-                serial = self.serial if self.serial and self.serial != "Unknown" else ""
-                parts = [p for p in (make, self.model, serial) if p]
-                identifier = f'"{" ".join(parts)}"'
             else:
-                # Mapping available but monitor not in it, or no make info;
-                # fall back to connector name
-                identifier = f'"{self.name}"'
+                # Missing from the mapping: either there is no Niri IPC at all
+                # (cross-write from another compositor), or the monitor is
+                # disconnected, which is exactly the monitor a profile turns
+                # off.  Its stored connector name is the one most likely to
+                # have gone stale, so rebuild the description instead and keep
+                # the name only for monitors with nothing to rebuild from.
+                native = self.niri_native_description()
+                identifier = f'"{native}"' if native else f'"{self.name}"'
         else:
             identifier = f'"{self.name}"'
         if not self.enabled:
