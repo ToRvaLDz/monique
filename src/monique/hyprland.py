@@ -54,7 +54,7 @@ class HyprlandIPC:
             while len(parts) < 3:
                 parts.append("0")
             self._version = (int(parts[0]), int(parts[1]), int(parts[2]))
-        except Exception:
+        except (OSError, RuntimeError, ValueError):
             self._version = (0, 0, 0)
         return self._version
 

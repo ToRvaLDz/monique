@@ -1,2 +1,12 @@
+# Regole applicate. Il default storico di ruff (E/F) più le due che vogliamo
+# mantenere davvero attive sulla gestione errori:
+#   BLE001 - vietato ``except Exception`` cieco
+#   S110   - vietato ``try/except/pass`` che ingoia l'errore
+# Le altre regole introdotte dai default più recenti di ruff (I001, UP035,
+# RUF012, PYI041, FURB, ecc.) sono puramente stilistiche e restano fuori, così
+# la CI non dipende dalla versione di ruff installata.
+[lint]
+select = ["E4", "E7", "E9", "F", "BLE001", "S110"]
+
 [lint.per-file-ignores]
 "src/monique/*.py" = ["E402"]  # gi.require_version() must precede gi.repository imports

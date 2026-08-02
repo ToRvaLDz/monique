@@ -189,7 +189,7 @@ class NiriIPC:
                     if norm.endswith(" Unknown"):
                         norm = norm[:-8]
                     niri_ids[norm] = raw_desc
-            except Exception:
+            except (OSError, RuntimeError, ValueError, KeyError, AttributeError):
                 niri_ids = None
 
         # Backup existing

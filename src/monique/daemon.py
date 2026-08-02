@@ -119,7 +119,7 @@ class MonitorDaemon:
             except (ConnectionRefusedError, FileNotFoundError, ConnectionError) as e:
                 log.warning("Cannot connect to compositor: %s. Retrying in 5s...", e)
                 await asyncio.sleep(5)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - top-level backstop: log and keep the daemon alive
                 log.error("Unexpected error: %s. Retrying in 5s...", e)
                 await asyncio.sleep(5)
             finally:
@@ -346,7 +346,7 @@ class MonitorDaemon:
                     self._last_apply_time = time.monotonic()
                 else:
                     log.info("No matching profile found")
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             log.error("Failed to apply profile: %s", e)
 
     # ── Lid monitoring via UPower D-Bus ─────────────────────────────
@@ -411,7 +411,7 @@ class MonitorDaemon:
 
                 loop = GLib.MainLoop.new(GLib.MainContext.default(), False)
                 loop.run()
-            except Exception as e:
+            except (OSError, GLib.Error) as e:
                 log.warning("Lid monitor failed: %s", e)
 
         def _on_signal(_conn, _sender, _path, _iface, _signal, params, _user_data):
@@ -454,7 +454,7 @@ class MonitorDaemon:
                 try:
                     ipc.move_workspace_to_monitor(ws_name, primary)
                     migrated += 1
-                except Exception as e:
+                except (OSError, RuntimeError) as e:
                     log.warning("Failed to migrate workspace %s: %s", ws_name, e)
 
         if migrated:

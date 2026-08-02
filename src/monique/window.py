@@ -31,10 +31,14 @@ from .utils import (
     save_active_profile,
 )
 
+import logging
 import os
+import subprocess
 from pathlib import Path
 import time
 from typing import Callable
+
+log = logging.getLogger(__name__)
 
 
 # Voci del selettore formato config Hyprland, nell'ordine mostrato in preferenze
@@ -148,8 +152,8 @@ class MonitorOSD(Gtk.Window):
                 f"keyword windowrulev2 noborder, title:^{t}$",
             ])
             MonitorOSD._rules_set = True
-        except Exception:
-            pass
+        except (OSError, RuntimeError) as e:
+            log.debug("Could not set OSD window rules: %s", e)
 
     def dismiss(self) -> None:
         if self._timer_id:
@@ -624,8 +628,8 @@ class MainWindow(Adw.ApplicationWindow):
                 "/org/freedesktop/UPower",
                 None, Gio.DBusSignalFlags.NONE, _on_signal, None,
             )
-        except Exception:
-            pass
+        except (OSError, GLib.Error) as e:
+            log.debug("Could not subscribe to UPower lid signal: %s", e)
 
     def _on_lid_changed(self) -> bool:
         """Called on the main thread when lid state changes."""
@@ -703,7 +707,7 @@ class MainWindow(Adw.ApplicationWindow):
             self._current_profile_name = ""
             if select_profile:
                 self._select_matching_profile()
-        except Exception as e:
+        except (OSError, RuntimeError) as e:
             self._set_status(f"Error: {e}")
             self._toast(f"Cannot connect to compositor: {e}")
 
@@ -984,7 +988,7 @@ class MainWindow(Adw.ApplicationWindow):
         )
         try:
             self._profile_mgr.save(profile)
-        except Exception as e:
+        except (OSError, TypeError, ValueError) as e:
             self._toast(f"An error occurred while saving {name}: {e}")
             if cancel_cb:
                 cancel_cb()
@@ -1148,7 +1152,7 @@ class MainWindow(Adw.ApplicationWindow):
                 use_description=use_desc, hypr_config_format=hypr_fmt,
             )
             self._set_status("Configuration applied")
-        except Exception as e:
+        except (OSError, RuntimeError, subprocess.CalledProcessError) as e:
             self._toast(f"Apply failed: {e}")
             for path in config_paths:
                 if not restore_backup(path) and path in created_paths and path.exists():
@@ -1179,8 +1183,8 @@ class MainWindow(Adw.ApplicationWindow):
                 try:
                     self._ipc.move_workspace_to_monitor(ws_name, primary)
                     self._migrated_workspaces.append((ws_name, ws_monitor))
-                except Exception:
-                    pass
+                except (OSError, RuntimeError) as e:
+                    log.debug("Could not migrate workspace %s: %s", ws_name, e)
 
     def _show_confirm_dialog(self, conf_paths, created_paths) -> None:
         self._confirm_remaining = CONFIRM_TIMEOUT
@@ -1243,8 +1247,8 @@ class MainWindow(Adw.ApplicationWindow):
         for ws_name, original_monitor in self._migrated_workspaces:
             try:
                 self._ipc.move_workspace_to_monitor(ws_name, original_monitor)
-            except Exception:
-                pass
+            except (OSError, RuntimeError) as e:
+                log.debug("Could not restore workspace %s: %s", ws_name, e)
         self._migrated_workspaces = []
 
         restored = False
@@ -1259,7 +1263,7 @@ class MainWindow(Adw.ApplicationWindow):
         if restored:
             try:
                 self._ipc.reload()
-            except Exception as e:
+            except (OSError, RuntimeError) as e:
                 self._toast(f"Revert reload failed: {e}")
                 return
 
