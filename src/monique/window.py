@@ -20,7 +20,9 @@ from .utils import (
     HYPR_FORMAT_BOTH,
     HYPR_FORMAT_LEGACY,
     HYPR_FORMAT_LUA,
+    DEFAULT_MONITOR_CONFIG_NAME,
     normalize_hypr_format,
+    sanitize_monitor_config_name,
     backup_file,
     restore_backup,
     is_hyprland_installed,
@@ -388,7 +390,11 @@ class MainWindow(Adw.ApplicationWindow):
         # ── Output Directory group ──
         grp_out = Adw.PreferencesGroup(
             title="Config Output",
-            description="Where generated monitor config files are written (leave empty for compositor default)",
+            description=(
+                "Where generated monitor config files are written. The filename is "
+                "a base name (no extension), relative to the compositor's config "
+                "directory; leave empty for the compositor default."
+            ),
         )
         page.add(grp_out)
 
@@ -398,6 +404,22 @@ class MainWindow(Adw.ApplicationWindow):
         entry_config_dir.set_text(self._app_settings.get("config_dir", ""))
         entry_config_dir.connect("changed", self._on_config_dir_changed)
         grp_out.add(entry_config_dir)
+
+        entry_config_name = Adw.EntryRow(
+            title="Monitor config filename (no extension)",
+        )
+        entry_config_name.set_text(
+            self._app_settings.get("monitor_config_name", "")
+        )
+        # Adw.EntryRow has no subtitle; the live filename preview goes in the
+        # tooltip, updated on every change.
+        entry_config_name.set_tooltip_text(
+            self._config_name_tooltip(
+                self._app_settings.get("monitor_config_name", "")
+            )
+        )
+        entry_config_name.connect("changed", self._on_config_name_changed)
+        grp_out.add(entry_config_name)
 
         # ── Hyprland config format group ──
         if is_hyprland_installed():
@@ -550,6 +572,37 @@ class MainWindow(Adw.ApplicationWindow):
         else:
             self._app_settings.pop("config_dir", None)
         save_app_settings(self._app_settings)
+
+    @staticmethod
+    def _config_name_tooltip(raw: str) -> str:
+        """Build the live filename-preview tooltip for the config-name row.
+
+        Shows the effective files after sanitizing, so the user sees any
+        traversal/extension stripping applied to what they typed.
+        """
+        effective = sanitize_monitor_config_name(raw)
+        return (
+            "Relative to the compositor config directory.\n"
+            f"Files: {effective}.kdl (Niri), {effective}.conf (Sway/Hyprland), "
+            f"{effective}.lua (Hyprland Lua)"
+        )
+
+    def _on_config_name_changed(self, row: Adw.EntryRow) -> None:
+        """Handle the monitor config filename entry change in preferences.
+
+        Empty (or a value equal to the default) means "use the built-in name",
+        so we drop the key entirely.  Otherwise store the raw text; it is
+        sanitized on read via ``get_monitor_config_name``.  The effective name
+        is shown in the tooltip so the user sees traversal/extension stripping.
+        """
+        text = row.get_text().strip()
+        effective = sanitize_monitor_config_name(text)
+        if not text or effective == DEFAULT_MONITOR_CONFIG_NAME:
+            self._app_settings.pop("monitor_config_name", None)
+        else:
+            self._app_settings["monitor_config_name"] = text
+        save_app_settings(self._app_settings)
+        row.set_tooltip_text(self._config_name_tooltip(text))
 
     def _on_clamshell_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
         """Handle the clamshell mode switch toggle in preferences."""

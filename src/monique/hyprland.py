@@ -8,15 +8,18 @@ import socket
 from pathlib import Path
 from typing import AsyncIterator
 
-from .config_paths import HYPRLAND, compositor_config_paths
+from .config_paths import (
+    HYPRLAND,
+    compositor_config_paths,
+    niri_monitors_path,
+    sway_monitors_path,
+)
 from .hypr_config import write_hyprland_configs
 from .models import MonitorConfig, Profile, WorkspaceRule
 from .utils import (
     hyprland_runtime_dir,
     is_sway_installed,
-    sway_config_dir,
     is_niri_installed,
-    niri_config_dir,
     is_sddm_running,
     is_greetd_running,
     write_xsetup,
@@ -210,13 +213,13 @@ class HyprlandIPC:
 
         # Also write Sway config if Sway is installed
         if is_sway_installed():
-            sway_conf = sway_config_dir() / "monitors.conf"
+            sway_conf = sway_monitors_path()
             backup_file(sway_conf)
             write_text(sway_conf, profile.generate_sway_config(use_description=use_description))
 
         # Also write Niri config if Niri is installed
         if is_niri_installed():
-            niri_conf = niri_config_dir() / "monitors.kdl"
+            niri_conf = niri_monitors_path()
             backup_file(niri_conf)
             write_text(niri_conf, profile.generate_niri_config(use_description=use_description))
 

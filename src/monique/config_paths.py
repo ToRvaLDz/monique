@@ -13,6 +13,7 @@ from pathlib import Path
 
 from .hypr_config import hyprland_config_paths
 from .utils import (
+    get_monitor_config_name,
     is_hyprland_installed,
     is_niri_installed,
     is_sway_installed,
@@ -28,12 +29,12 @@ NIRI = "niri"
 
 def sway_monitors_path() -> Path:
     """Return the Sway monitor config file."""
-    return sway_config_dir() / "monitors.conf"
+    return sway_config_dir() / f"{get_monitor_config_name()}.conf"
 
 
 def niri_monitors_path() -> Path:
     """Return the Niri monitor config file."""
-    return niri_config_dir() / "monitors.kdl"
+    return niri_config_dir() / f"{get_monitor_config_name()}.kdl"
 
 
 def compositor_config_paths(

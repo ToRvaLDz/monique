@@ -20,6 +20,12 @@ HYPR_FORMATS = (HYPR_FORMAT_LEGACY, HYPR_FORMAT_LUA, HYPR_FORMAT_BOTH)
 # Default retrocompatibile: scrive entrambi i file, come prima dell'opzione
 DEFAULT_HYPR_FORMAT = HYPR_FORMAT_BOTH
 
+# Base name (senza estensione) dei file di config monitor generati.  L'estensione
+# la aggiunge ogni compositore: ``.kdl`` (Niri), ``.conf`` (Sway/Hyprland legacy),
+# ``.lua`` (Hyprland >= 0.55).  Può includere sottocartelle relative alla config
+# dir del compositore (es. ``cfg/display``).  Il default riproduce i nomi storici.
+DEFAULT_MONITOR_CONFIG_NAME = "monitors"
+
 # Override runtime impostato via --config-dir (priorità su settings.json)
 _runtime_config_dir: str | None = None
 
@@ -210,6 +216,53 @@ def normalize_hypr_format(value: object) -> str:
 def get_hypr_config_format() -> str:
     """Return the Hyprland config format selected in the app settings."""
     return normalize_hypr_format(load_app_settings().get("hypr_config_format"))
+
+
+# Estensioni note che l'utente potrebbe digitare per errore nel base name:
+# le rimuoviamo così che ``display.kdl`` non diventi ``display.kdl.conf``.
+_MONITOR_CONFIG_EXTS = (".kdl", ".conf", ".lua")
+
+
+def sanitize_monitor_config_name(value: object) -> str:
+    """Return a safe relative stem for the monitor config files.
+
+    Accetta un percorso relativo (eventualmente con sottocartelle) e lo riduce a
+    un base name sicuro:
+
+    - i separatori vengono normalizzati a ``/`` (POSIX), come si scrivono nei
+      config di Niri/Hyprland;
+    - un'estensione nota digitata per errore (``.kdl``/``.conf``/``.lua``) viene
+      rimossa: l'estensione la aggiunge il compositore;
+    - percorsi assoluti, segmenti ``..``, ``.`` e componenti vuoti vengono
+      rifiutati (niente traversal fuori dalla config dir);
+    - se il risultato è vuoto o non valido si ricade sul default ``monitors``.
+    """
+    if not isinstance(value, str):
+        return DEFAULT_MONITOR_CONFIG_NAME
+
+    raw = value.strip().replace("\\", "/")
+    if not raw or raw.startswith("/"):
+        return DEFAULT_MONITOR_CONFIG_NAME
+
+    # Rimuove un'estensione nota digitata per errore (solo sull'ultimo segmento).
+    lowered = raw.lower()
+    for ext in _MONITOR_CONFIG_EXTS:
+        if lowered.endswith(ext):
+            raw = raw[: -len(ext)]
+            break
+
+    parts = [p for p in raw.split("/") if p not in ("", ".")]
+    if not parts or any(p == ".." for p in parts):
+        return DEFAULT_MONITOR_CONFIG_NAME
+
+    return "/".join(parts)
+
+
+def get_monitor_config_name() -> str:
+    """Return the sanitized monitor config base name from the app settings."""
+    return sanitize_monitor_config_name(
+        load_app_settings().get("monitor_config_name")
+    )
 
 
 def save_active_profile(name: str | None) -> None:
