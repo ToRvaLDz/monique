@@ -5,18 +5,24 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import socket
 from pathlib import Path
 from typing import AsyncIterator
 
-from .config_paths import NIRI, compositor_config_paths, niri_monitors_path
+from .config_paths import (
+    NIRI,
+    compositor_config_paths,
+    niri_monitors_path,
+    sway_monitors_path,
+)
 from .hypr_config import write_hyprland_configs
 from .models import MonitorConfig, Profile, focus_at_startup_from_niri
 from .utils import (
     niri_config_dir,
+    get_monitor_config_name,
     is_hyprland_installed,
     is_sway_installed,
-    sway_config_dir,
     is_sddm_running,
     is_greetd_running,
     write_xsetup,
@@ -38,12 +44,69 @@ def read_focus_at_startup() -> list[str]:
     return focus_at_startup_from_niri(conf.read_text(encoding="utf-8"))
 
 
-def _ensure_niri_config_include() -> bool:
-    """Ensure config.kdl includes monitors.kdl, removing inline output blocks.
+# Comment marker written above the Monique-managed ``include`` line in
+# config.kdl.  It is how we tell our own include apart from a user's when the
+# configured filename changes and the stale line has to be swapped out.
+_NIRI_INCLUDE_MARKER = "// Monique monitor configuration"
 
-    On first run, strips any top-level ``output`` blocks from config.kdl
-    (since Monique now manages them via monitors.kdl) and appends the
-    ``include`` directive.  Subsequent calls are no-ops.
+
+def _strip_monique_include(lines: list[str]) -> tuple[list[str], str | None]:
+    """Drop the Monique-managed marker + ``include`` line.
+
+    Returns the remaining lines and the previous include target (the quoted
+    filename), or ``None`` when no Monique-managed include was present.  User
+    ``include`` lines (which lack the marker) are left untouched.
+    """
+    kept: list[str] = []
+    old_target: str | None = None
+    i = 0
+    n = len(lines)
+    while i < n:
+        if lines[i].strip() == _NIRI_INCLUDE_MARKER:
+            j = i + 1
+            while j < n and lines[j].strip() == "":
+                j += 1
+            if j < n and lines[j].lstrip().startswith("include"):
+                m = re.search(r'"([^"]+)"', lines[j])
+                if m:
+                    old_target = m.group(1)
+                j += 1
+            i = j
+            continue
+        kept.append(lines[i])
+        i += 1
+    return kept, old_target
+
+
+def _strip_niri_output_blocks(lines: list[str]) -> list[str]:
+    """Remove top-level ``output "..." { ... }`` blocks (Monique manages them)."""
+    cleaned: list[str] = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if stripped.startswith("output ") and "{" in stripped:
+            depth = stripped.count("{") - stripped.count("}")
+            i += 1
+            while i < len(lines) and depth > 0:
+                depth += lines[i].count("{") - lines[i].count("}")
+                i += 1
+            if i < len(lines) and lines[i].strip() == "":
+                i += 1
+            continue
+        cleaned.append(lines[i])
+        i += 1
+    return cleaned
+
+
+def _ensure_niri_config_include() -> bool:
+    """Ensure config.kdl includes the configured monitor config file.
+
+    On first run, strips any top-level ``output`` blocks from config.kdl (since
+    Monique now manages them via the include) and appends the ``include``
+    directive.  When the configured filename has changed since a previous run,
+    the stale Monique-managed ``include`` is removed and replaced so Niri never
+    applies two conflicting layouts.  A user's own ``include`` of the current
+    file is respected and never duplicated.
 
     Returns True if config.kdl was modified.
     """
@@ -55,43 +118,33 @@ def _ensure_niri_config_include() -> bool:
     except OSError:
         return False
 
-    # Check if include already present
-    has_include = False
-    for line in text.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("//"):
-            continue
-        if "include" in stripped and "monitors.kdl" in stripped:
-            has_include = True
-            break
+    rel_name = f"{get_monitor_config_name()}.kdl"
+    lines = text.splitlines(keepends=True)
 
-    if has_include:
+    kept, old_target = _strip_monique_include(lines)
+    first_run = old_target is None
+
+    # A user-authored include of the current file (no Monique marker) counts as
+    # already present: don't add a second one.
+    user_has_current = any(
+        not ln.lstrip().startswith("//") and "include" in ln and rel_name in ln
+        for ln in kept
+    )
+
+    # Our include already targets the right file, or the user manages it: no-op.
+    if old_target == rel_name or (first_run and user_has_current):
         return False
 
-    # Strip top-level output blocks: ``output "..." { ... }``
-    lines = text.splitlines(keepends=True)
-    cleaned: list[str] = []
-    i = 0
-    while i < len(lines):
-        stripped = lines[i].strip()
-        if stripped.startswith("output ") and "{" in stripped:
-            # Skip until closing brace
-            depth = stripped.count("{") - stripped.count("}")
-            i += 1
-            while i < len(lines) and depth > 0:
-                depth += lines[i].count("{") - lines[i].count("}")
-                i += 1
-            # Skip trailing blank line after block
-            if i < len(lines) and lines[i].strip() == "":
-                i += 1
-            continue
-        cleaned.append(lines[i])
-        i += 1
+    # Only strip output blocks on a genuine first run; on a rename the user may
+    # have legitimately re-added output blocks we must not touch.
+    if first_run:
+        kept = _strip_niri_output_blocks(kept)
 
-    result = "".join(cleaned)
-    if not result.endswith("\n"):
+    result = "".join(kept).rstrip("\n")
+    if user_has_current:
         result += "\n"
-    result += '\n// Monique monitor configuration\ninclude "monitors.kdl"\n'
+    else:
+        result += f'\n\n{_NIRI_INCLUDE_MARKER}\ninclude "{rel_name}"\n'
 
     backup_file(config)
     write_text(config, result)
@@ -161,9 +214,8 @@ class NiriIPC:
         update_greetd: bool = True, use_description: bool = False,
         hypr_config_format: str | None = None,
     ) -> None:
-        """Write monitors.kdl (Niri auto-reloads) and cross-write other compositors."""
-        conf_dir = niri_config_dir()
-        monitors_conf = conf_dir / "monitors.kdl"
+        """Write the Niri monitor config (auto-reloads) and cross-write others."""
+        monitors_conf = niri_monitors_path()
 
         # Build mapping: normalised description → Niri-native description
         # so that output identifiers in the KDL config match what Niri expects
@@ -208,7 +260,7 @@ class NiriIPC:
 
         # Cross-write Sway config if Sway is installed
         if is_sway_installed():
-            sway_conf = sway_config_dir() / "monitors.conf"
+            sway_conf = sway_monitors_path()
             backup_file(sway_conf)
             write_text(sway_conf, profile.generate_sway_config(use_description=use_description))
 

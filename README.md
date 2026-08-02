@@ -79,6 +79,7 @@
 - **Confirm-or-revert** — 10-second countdown after applying, auto-reverts if display is unusable
 - **CLI interface** — list, query, and switch profiles from the terminal (`--list-profiles`, `--current-profile`, `--switch-profile`), perfect for hotkey bindings
 - **Custom config directory** — write generated monitor config files to a custom path instead of the compositor default (via Preferences or `--config-dir`)
+- **Custom config filename** — change the generated file's base name (default `monitors`) from **Preferences → Config Output**; the right extension is added per compositor (`.kdl`/`.conf`/`.lua`) and subdirectories are supported (e.g. `cfg/display`)
 - **Active profile tracking** — the last applied profile is persisted across GUI, CLI, and daemon, queryable via `--current-profile`
 
 ## Installation
@@ -263,6 +264,14 @@ leaves the previously generated file on disk: delete it, or drop its `source`/`r
 line from your Hyprland config, otherwise Hyprland keeps applying the stale layout.
 
 To use a custom output directory, set it in **Preferences → Config Output** or pass `--config-dir` on the command line.
+
+To change the generated file's base name (default `monitors`), set **Monitor config filename** in
+**Preferences → Config Output** (stored as `monitor_config_name` in `settings.json`). The value is a
+base name without extension, relative to the compositor's config directory, and may include
+subdirectories (e.g. `cfg/display` → `cfg/display.kdl` for Niri, `cfg/display.conf` for Sway, and
+`cfg/display.conf`/`cfg/display.lua` for Hyprland). Absolute paths and `..` segments are rejected.
+For Niri, the `include` line in `config.kdl` is kept in sync with the configured name; if you change
+the name later, update your Hyprland `source`/`require` lines to match.
 
 ## Project structure
 

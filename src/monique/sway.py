@@ -10,14 +10,17 @@ import struct
 from pathlib import Path
 from typing import AsyncIterator
 
-from .config_paths import SWAY, compositor_config_paths
+from .config_paths import (
+    SWAY,
+    compositor_config_paths,
+    niri_monitors_path,
+    sway_monitors_path,
+)
 from .hypr_config import write_hyprland_configs
 from .models import MonitorConfig, Profile
 from .utils import (
     is_hyprland_installed,
-    sway_config_dir,
     is_niri_installed,
-    niri_config_dir,
     is_sddm_running,
     is_greetd_running,
     write_xsetup,
@@ -115,8 +118,7 @@ class SwayIPC:
         hypr_config_format: str | None = None,
     ) -> None:
         """Write monitor config and reload Sway."""
-        conf_dir = sway_config_dir()
-        monitors_conf = conf_dir / "monitors.conf"
+        monitors_conf = sway_monitors_path()
 
         # Backup existing
         backup_file(monitors_conf)
@@ -132,7 +134,7 @@ class SwayIPC:
 
         # Also write Niri config if Niri is installed
         if is_niri_installed():
-            niri_conf = niri_config_dir() / "monitors.kdl"
+            niri_conf = niri_monitors_path()
             backup_file(niri_conf)
             write_text(niri_conf, profile.generate_niri_config(use_description=use_description))
 
