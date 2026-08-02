@@ -89,7 +89,6 @@ class MonitorDaemon:
         self._debounce_handle: asyncio.TimerHandle | None = None
         self._last_apply_time: float = 0.0
         self._last_applied_profile: str | None = None
-        self._prev_applied_profile: str | None = None
         self._last_applied_fingerprint: set[str] = set()
         self._using_udev: bool = False
         self._ipc: HyprlandIPC | NiriIPC | SwayIPC | None = None
@@ -224,17 +223,15 @@ class MonitorDaemon:
                     log.info("Profile %s already applied, skipping", profile.name)
                     return
 
-                # Detect A→B→A loop (config reload changes fingerprint temporarily)
-                if not force and profile.name == self._prev_applied_profile:
-                    elapsed = time.monotonic() - self._last_apply_time
-                    if elapsed < 30:
-                        log.info(
-                            "Loop detected (%s → %s → %s), skipping",
-                            self._prev_applied_profile,
-                            self._last_applied_profile,
-                            profile.name,
-                        )
-                        return
+                # No A→B→A loop guard here on purpose.  Config-reload echoes are
+                # already absorbed upstream in ``_schedule_apply`` (UDEV_SETTLE_S
+                # in udev mode, the Niri settle window otherwise), so by the time
+                # we get here the fingerprint has settled and the live state is
+                # authoritative.  A name-history guard cannot tell a reload echo
+                # apart from a real drop/recover (DPMS standby produces exactly
+                # the same A→B→A sequence) and, being reachable only on the
+                # recovery leg, it systematically stranded the daemon on the
+                # degraded profile.
 
                 # When clamshell is active, the daemon owns internal display
                 # control.  First ensure internal monitors are enabled
@@ -303,7 +300,6 @@ class MonitorDaemon:
                 profile.last_applied_time = time.time()
                 self._profile_mgr.save(profile)
                 self._last_apply_time = time.monotonic()
-                self._prev_applied_profile = self._last_applied_profile
                 self._last_applied_profile = profile.name
                 self._last_applied_fingerprint = set(fingerprint)
                 save_active_profile(profile.name)
