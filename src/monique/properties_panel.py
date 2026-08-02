@@ -65,6 +65,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._building = False
         self._backend: str = "hyprland"  # "hyprland", "sway", or "niri"
         self._hyprland_icc: bool = False
+        self._hdr_dependent_rows: list[Gtk.Widget] = []
 
         self._build_ui()
 
@@ -215,6 +216,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_sdr_bright.set_title("SDR Brightness")
         self._spin_sdr_bright.set_digits(2)
         self._spin_sdr_bright.connect("notify::value", self._on_changed)
+        self._hdr_dependent_rows.append(self._spin_sdr_bright)
         self._grp_adv.add(self._spin_sdr_bright)
         _fix_spin_icons(self._spin_sdr_bright)
 
@@ -222,6 +224,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_sdr_sat.set_title("SDR Saturation")
         self._spin_sdr_sat.set_digits(2)
         self._spin_sdr_sat.connect("notify::value", self._on_changed)
+        self._hdr_dependent_rows.append(self._spin_sdr_sat)
         self._grp_adv.add(self._spin_sdr_sat)
         _fix_spin_icons(self._spin_sdr_sat)
 
@@ -260,13 +263,10 @@ class PropertiesPanel(Adw.PreferencesPage):
         )
         self.add(self._grp_hdr)
 
-        self._sw_hdr = Adw.SwitchRow(title="HDR")
-        self._sw_hdr.connect("notify::active", self._on_changed)
-        self._grp_hdr.add(self._sw_hdr)
-
         self._combo_sdr_eotf = Adw.ComboRow(title="SDR EOTF")
         self._combo_sdr_eotf.set_model(Gtk.StringList.new(["Global", "sRGB", "Gamma 2.2"]))
         self._combo_sdr_eotf.connect("notify::selected", self._on_changed)
+        self._hdr_dependent_rows.append(self._combo_sdr_eotf)
         self._grp_hdr.add(self._combo_sdr_eotf)
 
         self._combo_supports_hdr = Adw.ComboRow(title="Supports HDR")
@@ -283,6 +283,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_sdr_min_lum.set_title("SDR Min Luminance")
         self._spin_sdr_min_lum.set_digits(3)
         self._spin_sdr_min_lum.connect("notify::value", self._on_changed)
+        self._hdr_dependent_rows.append(self._spin_sdr_min_lum)
         self._grp_hdr.add(self._spin_sdr_min_lum)
         _fix_spin_icons(self._spin_sdr_min_lum)
 
@@ -290,6 +291,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_sdr_max_lum.set_title("SDR Max Luminance")
         self._spin_sdr_max_lum.set_digits(1)
         self._spin_sdr_max_lum.connect("notify::value", self._on_changed)
+        self._hdr_dependent_rows.append(self._spin_sdr_max_lum)
         self._grp_hdr.add(self._spin_sdr_max_lum)
         _fix_spin_icons(self._spin_sdr_max_lum)
 
@@ -297,6 +299,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_min_lum.set_title("Min Luminance")
         self._spin_min_lum.set_digits(1)
         self._spin_min_lum.connect("notify::value", self._on_changed)
+        self._hdr_dependent_rows.append(self._spin_min_lum)
         self._grp_hdr.add(self._spin_min_lum)
         _fix_spin_icons(self._spin_min_lum)
 
@@ -304,6 +307,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_max_lum.set_title("Max Luminance")
         self._spin_max_lum.set_digits(1)
         self._spin_max_lum.connect("notify::value", self._on_changed)
+        self._hdr_dependent_rows.append(self._spin_max_lum)
         self._grp_hdr.add(self._spin_max_lum)
         _fix_spin_icons(self._spin_max_lum)
 
@@ -311,11 +315,25 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_max_avg_lum.set_title("Max Avg Luminance")
         self._spin_max_avg_lum.set_digits(1)
         self._spin_max_avg_lum.connect("notify::value", self._on_changed)
+        self._hdr_dependent_rows.append(self._spin_max_avg_lum)
         self._grp_hdr.add(self._spin_max_avg_lum)
         _fix_spin_icons(self._spin_max_avg_lum)
 
         # Default to insensitive
         self._grp_hdr.set_sensitive(False)
+
+    def _hdr_dependent_settings_hints(self) -> None:
+        """Set subtitle/tooltip on HDR-dependent rows when CM won't apply them."""
+        cm_val = self._combo_cm.get_model().get_string(self._combo_cm.get_selected())
+        inactive = cm_val not in ("hdr", "hdredid")
+        tip = (
+            "Only applied when Color Management is set to hdr or hdredid, "
+            "or from auto hdr settings"
+            if inactive else None
+        )
+        for row in self._hdr_dependent_rows:
+            row.set_subtitle("inactive" if inactive else "")
+            row.set_tooltip_text(tip)
 
     def set_compositor(
         self,
@@ -492,7 +510,6 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_res_right.set_value(monitor.reserved_right)
 
         # HDR / EDID Override
-        self._sw_hdr.set_active(monitor.hdr)
         self._combo_sdr_eotf.set_selected(monitor.sdr_eotf)
         self._combo_supports_hdr.set_selected(monitor.supports_hdr)
         self._combo_supports_wide.set_selected(monitor.supports_wide_color)
@@ -503,6 +520,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._spin_max_avg_lum.set_value(monitor.max_avg_luminance)
 
         self._building = False
+        self._hdr_dependent_settings_hints()
         self._sync_icc_ui()
 
     def _apply_to_monitor(self) -> None:
@@ -565,7 +583,6 @@ class PropertiesPanel(Adw.PreferencesPage):
         m.reserved_right = int(self._spin_res_right.get_value())
 
         # HDR / EDID Override
-        m.hdr = self._sw_hdr.get_active()
         m.sdr_eotf = self._combo_sdr_eotf.get_selected()
         m.supports_hdr = self._combo_supports_hdr.get_selected()
         m.supports_wide_color = self._combo_supports_wide.get_selected()
@@ -593,6 +610,7 @@ class PropertiesPanel(Adw.PreferencesPage):
             return
         self._sync_icc_ui()
         self._apply_to_monitor()
+        self._hdr_dependent_settings_hints()
         self.emit("property-changed")
 
     def _sync_icc_ui(self) -> None:

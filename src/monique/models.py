@@ -185,7 +185,6 @@ class MonitorConfig:
     sdr_saturation: float = 1.0
 
     # HDR / EDID Override (Hyprland monitorv2 only)
-    hdr: bool = False
     sdr_eotf: int = 0              # 0=global, 1=sRGB, 2=Gamma 2.2
     supports_hdr: int = 0          # 0=auto, 1=force on
     supports_wide_color: int = 0   # 0=auto, 1=force on
@@ -570,7 +569,7 @@ class MonitorConfig:
         if supports_icc and self.icc_profile:
             lines.append(f"  icc = {self.icc_profile}")
         else:
-            cm = self.color_management or ("hdr" if self.hdr else "")
+            cm = self.color_management
             if cm:
                 lines.append(f"  cm = {cm}")
 
@@ -664,7 +663,7 @@ class MonitorConfig:
         if supports_icc and self.icc_profile:
             lines.append(_lua_field("icc", self.icc_profile))
         else:
-            cm = self.color_management or ("hdr" if self.hdr else "")
+            cm = self.color_management
             if cm:
                 lines.append(_lua_field("cm", cm))
 
@@ -1306,9 +1305,19 @@ class Profile:
 
     @classmethod
     def from_dict(cls, d: dict) -> Profile:
+        # legacy migration for "hdr" field
+        monitors = []
+        for m in d.get("monitors", []):
+            m = dict(m)  # defensive copy
+            if m.pop("hdr", False) and not m.get("color_management"):
+                # legacy profiles with "hdr": true and cm = ""
+                # which is equivalent to "cm=hdr" preset
+                m["color_management"] = "hdr"
+            monitors.append(m)
+
         return cls(
             name=d.get("name", ""),
-            monitors=[MonitorConfig.from_dict(m) for m in d.get("monitors", [])],
+            monitors=[MonitorConfig.from_dict(m) for m in monitors],
             workspace_rules=[WorkspaceRule.from_dict(w) for w in d.get("workspace_rules", [])],
             last_applied_time=d.get("last_applied_time", 0.0),
         )
