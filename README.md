@@ -73,6 +73,7 @@
 - **Hotplug daemon** (`moniqued`) — automatically applies the best matching profile when monitors are connected or disconnected
 - **Display manager integration** — syncs your layout to the login screen for SDDM (xrandr) and greetd (sway), with polkit rule for passwordless writes
 - **Workspace rules** — configure workspace-to-monitor assignments (Hyprland/Sway)
+- **HDR & color management** — color management presets, 10-bit output, ICC profiles, SDR brightness/saturation and per-monitor EDID luminance overrides (Hyprland `monitorv2`)
 - **Live preview** — OSD overlay to identify monitors (double-click)
 - **Workspace migration** — automatically moves workspaces to the primary monitor when their monitor is disabled or unplugged (reverted if you click "Revert")
 - **Clamshell mode** — disable the internal laptop display when external monitors are connected (manual toggle in the toolbar or automatic via daemon preferences); the daemon also monitors the lid state via UPower D-Bus
@@ -236,6 +237,48 @@ A polkit rule is included to allow passwordless writes:
 ```
 
 Toggle from the GUI: **Menu > Preferences > Update SDDM Xsetup** or **Update greetd config**.
+
+## HDR and color management
+
+Available on **Hyprland 0.50+**, where Monique writes the `monitorv2 { … }` block syntax
+(auto-detected from the running compositor). Sway and Niri expose no equivalent options,
+so these controls stay disabled there.
+
+Select a monitor and scroll the properties sidebar. **Advanced** group:
+
+| Control | Hyprland key | Values |
+|---|---|---|
+| Color Management | `cm` | `auto`, `srgb`, `dcip3`, `dp3`, `adobe`, `wide`, `edid`, `hdr`, `hdredid` |
+| Bit Depth | `bitdepth` | `8` or `10` (10 recommended for HDR) |
+| ICC Profile | `icc` | absolute path, Hyprland 0.55+ (takes precedence over `cm`) |
+| SDR Brightness | `sdrbrightness` | `0.0` to `5.0`, default `1.0` |
+| SDR Saturation | `sdrsaturation` | `0.0` to `5.0`, default `1.0` |
+
+**HDR / EDID Override** group, for panels whose EDID reports wrong or missing capabilities:
+
+| Control | Hyprland key | Values |
+|---|---|---|
+| SDR EOTF | `sdr_eotf` | Global / sRGB / Gamma 2.2 |
+| Supports HDR | `supports_hdr` | Auto / Force |
+| Supports Wide Color | `supports_wide_color` | Auto / Force |
+| SDR Min Luminance | `sdr_min_luminance` | `0.0` to `10.0` |
+| SDR Max Luminance | `sdr_max_luminance` | `0.0` to `2000.0` |
+| Min Luminance | `min_luminance` | `0.0` to `2000.0` |
+| Max Luminance | `max_luminance` | `0.0` to `10000.0` |
+| Max Avg Luminance | `max_avg_luminance` | `0.0` to `10000.0` |
+
+Rows marked *inactive* only take effect when Color Management is set to `hdr` or `hdredid`,
+or when Hyprland's auto HDR settings drive them. Values left at their default are omitted
+from the generated config, so Hyprland keeps its own defaults.
+
+> **Washed-out SDR content on an HDR display** is the usual first problem: raise
+> **SDR Brightness** above `1.0` and adjust **SDR Saturation**, and try **SDR EOTF → Gamma 2.2**.
+> `hdredid` uses the luminance data from your display's EDID, which helps when that data is
+> accurate and hurts when it is not, which is what the manual luminance overrides are for.
+
+> **Note:** Monique only writes the compositor-side configuration. Whether a given
+> application or game actually outputs HDR depends on it, and on Proton/gamescope, not on
+> the monitor configurator.
 
 ## Configuration
 
