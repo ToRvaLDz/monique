@@ -5,15 +5,14 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-import os
 import signal
 import threading
 import time
-from pathlib import Path
 
 from .hyprland import HyprlandIPC
 from .niri import NiriIPC
 from .sway import SwayIPC
+from .detect import detect_backend
 from .models import Profile, apply_clamshell, undo_clamshell
 from .profile_manager import ProfileManager
 from .utils import load_app_settings, save_active_profile
@@ -37,50 +36,6 @@ NIRI_SETTLE_S_DEFAULT = 15  # Default settle time; overridden by user setting
 NIRI_SETTLE_BASE = 10  # Extra base seconds added to settle (matches GUI confirm timeout)
 
 
-def _detect_backend() -> HyprlandIPC | NiriIPC | SwayIPC | None:
-    """Auto-detect the running compositor.
-
-    First checks environment variables, then probes XDG_RUNTIME_DIR
-    for compositor sockets (handles race condition at login when env vars
-    are not yet exported to the systemd user manager).
-    """
-    if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
-        return HyprlandIPC()
-    if os.environ.get("NIRI_SOCKET"):
-        return NiriIPC()
-    if os.environ.get("SWAYSOCK"):
-        return SwayIPC()
-
-    # Fallback: scan for compositor sockets in XDG_RUNTIME_DIR
-    xdg = os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}")
-    xdg_path = Path(xdg)
-
-    # Hyprland: look for $XDG_RUNTIME_DIR/hypr/<signature>/.socket.sock
-    hypr_dir = xdg_path / "hypr"
-    if hypr_dir.is_dir():
-        for child in hypr_dir.iterdir():
-            if child.is_dir() and (child / ".socket.sock").exists():
-                os.environ["HYPRLAND_INSTANCE_SIGNATURE"] = child.name
-                log.info("Found Hyprland socket: %s", child.name)
-                return HyprlandIPC()
-
-    # Niri: look for $XDG_RUNTIME_DIR/niri.*.sock
-    for sock in xdg_path.glob("niri.*.sock"):
-        if sock.is_socket():
-            os.environ["NIRI_SOCKET"] = str(sock)
-            log.info("Found Niri socket: %s", sock.name)
-            return NiriIPC()
-
-    # Sway: look for $XDG_RUNTIME_DIR/sway-ipc.*.sock
-    for sock in xdg_path.glob("sway-ipc.*.sock"):
-        if sock.is_socket():
-            os.environ["SWAYSOCK"] = str(sock)
-            log.info("Found Sway socket: %s", sock.name)
-            return SwayIPC()
-
-    return None
-
-
 class MonitorDaemon:
     """Watches compositor events and auto-applies matching profiles."""
 
@@ -102,7 +57,7 @@ class MonitorDaemon:
 
         while True:
             try:
-                ipc = _detect_backend()
+                ipc = detect_backend()
                 if ipc is None:
                     log.warning("No supported compositor detected. Retrying in 5s...")
                     await asyncio.sleep(5)

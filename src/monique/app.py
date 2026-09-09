@@ -39,7 +39,13 @@ def _cmd_list_profiles() -> int:
 
 
 def _cmd_current_profile() -> int:
-    name = get_active_profile()
+    """Print the profile matching the live layout, not just the last applied one."""
+    from .detect import detect_current_profile
+
+    match = detect_current_profile()
+    # Nessun compositore raggiungibile o layout senza corrispondenze: si ricade
+    # sull'ultimo profilo applicato, l'unica informazione disponibile
+    name = match.name if match else get_active_profile()
     if name:
         print(name)
         return 0
@@ -48,10 +54,7 @@ def _cmd_current_profile() -> int:
 
 
 def _cmd_switch_profile(name: str) -> int:
-    import os
-    from .hyprland import HyprlandIPC
-    from .niri import NiriIPC
-    from .sway import SwayIPC
+    from .detect import detect_backend
     from .utils import load_app_settings
 
     mgr = ProfileManager()
@@ -63,13 +66,8 @@ def _cmd_switch_profile(name: str) -> int:
             print(f"available profiles: {', '.join(available)}", file=sys.stderr)
         return 1
 
-    if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
-        ipc = HyprlandIPC()
-    elif os.environ.get("NIRI_SOCKET"):
-        ipc = NiriIPC()
-    elif os.environ.get("SWAYSOCK"):
-        ipc = SwayIPC()
-    else:
+    ipc = detect_backend()
+    if ipc is None:
         print("error: no supported compositor detected", file=sys.stderr)
         return 1
 
