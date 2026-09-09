@@ -28,12 +28,15 @@ source=()
 
 build() {
     cd "$startdir"
+    # dist/ persiste tra i build locali: i wheel di versioni precedenti
+    # farebbero collidere l'installazione in package()
+    rm -rf dist/
     python -m build --wheel --no-isolation
 }
 
 package() {
     cd "$startdir"
-    python -m installer --destdir="$pkgdir" dist/*.whl
+    python -m installer --destdir="$pkgdir" "dist/$pkgname-$pkgver-py3-none-any.whl"
 
     # Desktop entry
     install -Dm644 data/com.github.monique.desktop \
