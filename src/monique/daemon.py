@@ -6,12 +6,12 @@ import asyncio
 import contextlib
 import logging
 import signal
-import threading
 import time
 
 from .hyprland import HyprlandIPC
 from .niri import NiriIPC
 from .sway import SwayIPC
+from .dbus_events import SystemBusWatcher
 from .detect import detect_backend
 from .models import Profile, apply_clamshell, undo_clamshell
 from .profile_manager import ProfileManager
@@ -53,7 +53,7 @@ class MonitorDaemon:
     async def run(self) -> None:
         log.info("Starting Monique daemon")
         self._asyncio_loop = asyncio.get_event_loop()
-        self._start_lid_monitor()
+        self._start_system_watcher()
 
         while True:
             try:
@@ -304,89 +304,40 @@ class MonitorDaemon:
         except (OSError, RuntimeError) as e:
             log.error("Failed to apply profile: %s", e)
 
-    # ── Lid monitoring via UPower D-Bus ─────────────────────────────
+    # ── Eventi di sistema (coperchio, risveglio) ────────────────────
 
-    def _start_lid_monitor(self) -> None:
-        """Start monitoring lid state via UPower D-Bus in a background thread."""
-        try:
-            import gi
-            gi.require_version("Gio", "2.0")
-            from gi.repository import Gio, GLib
-        except (ImportError, ValueError):
-            log.info("GLib not available, lid monitoring disabled")
+    def _start_system_watcher(self) -> None:
+        """Watch the system bus for lid and suspend/resume events."""
+        SystemBusWatcher(
+            on_lid_change=self._on_lid_change,
+            on_resume=self._on_resume,
+        ).start()
+
+    def _on_lid_change(self, closed: bool, initial: bool) -> None:
+        """Lid opened or closed: clamshell decisions depend on this state.
+
+        The state read at startup is only recorded: the first apply is the
+        one ``_listen`` performs once connected.
+        """
+        self._lid_closed = closed
+        if not initial:
+            self._request_apply()
+
+    def _on_resume(self) -> None:
+        """Back from suspend: monitors may have changed while we were asleep.
+
+        No hotplug event is delivered for a monitor plugged or unplugged
+        during suspend, so the layout has to be re-checked from scratch.
+        """
+        self._request_apply()
+
+    def _request_apply(self) -> None:
+        """Schedule an apply from a non-asyncio thread."""
+        if self._ipc is None or self._asyncio_loop is None:
             return
-
-        def _run() -> None:
-            try:
-                bus = Gio.bus_get_sync(Gio.BusType.SYSTEM)
-
-                # Check if lid is present
-                result = bus.call_sync(
-                    "org.freedesktop.UPower",
-                    "/org/freedesktop/UPower",
-                    "org.freedesktop.DBus.Properties",
-                    "Get",
-                    GLib.Variant("(ss)", ("org.freedesktop.UPower", "LidIsPresent")),
-                    GLib.VariantType("(v)"),
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
-                lid_present = result.get_child_value(0).get_variant().get_boolean()
-                if not lid_present:
-                    log.info("No lid detected, lid monitoring disabled")
-                    return
-
-                # Get initial lid state
-                result = bus.call_sync(
-                    "org.freedesktop.UPower",
-                    "/org/freedesktop/UPower",
-                    "org.freedesktop.DBus.Properties",
-                    "Get",
-                    GLib.Variant("(ss)", ("org.freedesktop.UPower", "LidIsClosed")),
-                    GLib.VariantType("(v)"),
-                    Gio.DBusCallFlags.NONE,
-                    -1,
-                    None,
-                )
-                self._lid_closed = result.get_child_value(0).get_variant().get_boolean()
-                log.info("Initial lid state: %s", "closed" if self._lid_closed else "open")
-
-                # Subscribe to PropertiesChanged
-                bus.signal_subscribe(
-                    "org.freedesktop.UPower",
-                    "org.freedesktop.DBus.Properties",
-                    "PropertiesChanged",
-                    "/org/freedesktop/UPower",
-                    None,
-                    Gio.DBusSignalFlags.NONE,
-                    _on_signal,
-                    None,
-                )
-
-                loop = GLib.MainLoop.new(GLib.MainContext.default(), False)
-                loop.run()
-            except (OSError, GLib.Error) as e:
-                log.warning("Lid monitor failed: %s", e)
-
-        def _on_signal(_conn, _sender, _path, _iface, _signal, params, _user_data):
-            iface_name = params.get_child_value(0).get_string()
-            if iface_name != "org.freedesktop.UPower":
-                return
-            changed = params.get_child_value(1)
-            lid_val = changed.lookup_value("LidIsClosed", GLib.VariantType("b"))
-            if lid_val is None:
-                return
-            closed = lid_val.get_boolean()
-            log.info("Lid state changed: %s", "closed" if closed else "open")
-            self._lid_closed = closed
-            if self._ipc and self._asyncio_loop:
-                self._asyncio_loop.call_soon_threadsafe(
-                    lambda: self._schedule_apply(self._ipc, force=True),
-                )
-
-        thread = threading.Thread(target=_run, daemon=True, name="lid-monitor")
-        thread.start()
+        self._asyncio_loop.call_soon_threadsafe(
+            lambda: self._schedule_apply(self._ipc, force=True),
+        )
 
     def _migrate_orphaned_workspaces(
         self,

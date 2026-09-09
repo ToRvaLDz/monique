@@ -156,3 +156,63 @@ def test_unchanged_fingerprint_does_not_reapply() -> None:
         assert ipc.applied == ["Full", "Full"]
 
     asyncio.run(scenario())
+
+
+# ── Eventi di sistema: risveglio e coperchio ────────────────────────
+
+
+def _daemon_with_loop(loop: asyncio.AbstractEventLoop) -> tuple[MonitorDaemon, list[bool]]:
+    """A daemon wired to *loop*, recording the ``force`` flag of each apply."""
+    daemon = MonitorDaemon()
+    daemon._ipc = _FakeIPC([])
+    daemon._asyncio_loop = loop
+    scheduled: list[bool] = []
+    daemon._schedule_apply = lambda ipc, *, force=False: scheduled.append(force)
+    return daemon, scheduled
+
+
+def test_resume_forces_an_apply():
+    """Monitors can change during suspend with no hotplug event to show for it."""
+    loop = asyncio.new_event_loop()
+    try:
+        daemon, scheduled = _daemon_with_loop(loop)
+        daemon._on_resume()
+        loop.run_until_complete(asyncio.sleep(0))
+    finally:
+        loop.close()
+
+    assert scheduled == [True]
+
+
+def test_resume_before_the_compositor_is_connected_is_ignored():
+    """Waking up before _listen has an IPC must not blow up."""
+    daemon = MonitorDaemon()
+    daemon._on_resume()  # nessun ipc, nessun loop
+
+    assert daemon._ipc is None
+
+
+def test_initial_lid_state_is_recorded_without_applying():
+    loop = asyncio.new_event_loop()
+    try:
+        daemon, scheduled = _daemon_with_loop(loop)
+        daemon._on_lid_change(True, True)
+        loop.run_until_complete(asyncio.sleep(0))
+    finally:
+        loop.close()
+
+    assert daemon._lid_closed is True
+    assert scheduled == []
+
+
+def test_lid_change_applies():
+    loop = asyncio.new_event_loop()
+    try:
+        daemon, scheduled = _daemon_with_loop(loop)
+        daemon._on_lid_change(True, False)
+        loop.run_until_complete(asyncio.sleep(0))
+    finally:
+        loop.close()
+
+    assert daemon._lid_closed is True
+    assert scheduled == [True]
