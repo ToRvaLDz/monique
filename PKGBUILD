@@ -1,6 +1,6 @@
 # Maintainer: Marco Migozzi <torvaldz@gmail.com>
 pkgname=monique
-pkgver=0.7.0
+pkgver=0.8.0
 pkgrel=1
 pkgdesc='MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland, Sway and Niri'
 arch=('any')
