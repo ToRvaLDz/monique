@@ -34,6 +34,8 @@ UDEV_SETTLE_S = 5  # Ignore udev events shortly after applying (config reload tr
 NIRI_DEBOUNCE_MS = 3000  # Niri temporarily drops outputs during rearrangement
 NIRI_SETTLE_S_DEFAULT = 15  # Default settle time; overridden by user setting
 NIRI_SETTLE_BASE = 10  # Extra base seconds added to settle (matches GUI confirm timeout)
+RESUME_POLL_S = 0.5  # Interval between monitor reads while waiting for resume to settle
+RESUME_TIMEOUT_S = 10.0  # Give up waiting for a stable read and apply what we have
 
 
 class MonitorDaemon:
@@ -48,6 +50,7 @@ class MonitorDaemon:
         self._using_udev: bool = False
         self._ipc: HyprlandIPC | NiriIPC | SwayIPC | None = None
         self._lid_closed: bool | None = None  # None = no lid / not monitored
+        self._awaiting_stable: bool = False
         self._asyncio_loop: asyncio.AbstractEventLoop | None = None
 
     async def run(self) -> None:
@@ -123,6 +126,12 @@ class MonitorDaemon:
 
     def _schedule_apply(self, ipc: HyprlandIPC | NiriIPC | SwayIPC, *, force: bool = False) -> None:
         """Debounce monitor events before applying."""
+        if self._awaiting_stable:
+            # Resume fires a burst of DRM events; applying on one of them would
+            # defeat the wait for a settled monitor list
+            log.debug("Monitors still settling, ignoring event")
+            return
+
         loop = asyncio.get_event_loop()
         if self._debounce_handle:
             self._debounce_handle.cancel()
@@ -329,7 +338,58 @@ class MonitorDaemon:
         No hotplug event is delivered for a monitor plugged or unplugged
         during suspend, so the layout has to be re-checked from scratch.
         """
-        self._request_apply()
+        if self._ipc is None or self._asyncio_loop is None:
+            return
+        self._asyncio_loop.call_soon_threadsafe(self._start_resume_apply)
+
+    def _start_resume_apply(self) -> None:
+        """Enter the resume path, dropping any apply already in flight."""
+        if self._debounce_handle:
+            self._debounce_handle.cancel()
+            self._debounce_handle = None
+        asyncio.ensure_future(self._apply_when_stable(self._ipc))
+
+    async def _apply_when_stable(self, ipc: HyprlandIPC | NiriIPC | SwayIPC) -> None:
+        """Wait for the monitor list to settle, then apply the matching profile."""
+        if self._awaiting_stable:
+            return
+        self._awaiting_stable = True
+        try:
+            await self._wait_for_stable(ipc)
+        finally:
+            self._awaiting_stable = False
+        await self._apply_best_profile(ipc, force=True)
+
+    async def _wait_for_stable(
+        self,
+        ipc: HyprlandIPC | NiriIPC | SwayIPC,
+        *,
+        interval: float = RESUME_POLL_S,
+        timeout: float = RESUME_TIMEOUT_S,
+    ) -> None:
+        """Block until two consecutive reads report the same monitors.
+
+        Outputs come back one at a time after a resume, so the first read is
+        rarely the whole picture: matching on it would apply a degraded
+        profile and migrate workspaces away from monitors that are about to
+        reappear.  A monitor that never comes back must not stall the daemon
+        either, hence the timeout.
+        """
+        previous: list[str] | None = None
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            try:
+                fingerprint = sorted(m.description for m in ipc.get_monitors() if m.description)
+            except (OSError, RuntimeError) as e:
+                # Il compositore può non rispondere subito dopo il risveglio
+                log.debug("Monitor read failed while settling: %s", e)
+                fingerprint = []
+            if fingerprint and fingerprint == previous:
+                log.info("Monitors settled: %s", fingerprint)
+                return
+            previous = fingerprint
+            await asyncio.sleep(interval)
+        log.warning("Monitors still unsettled after %.0fs, applying anyway", timeout)
 
     def _request_apply(self) -> None:
         """Schedule an apply from a non-asyncio thread."""
