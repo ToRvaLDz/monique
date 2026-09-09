@@ -78,10 +78,10 @@
 - **Workspace migration** — automatically moves workspaces to the primary monitor when their monitor is disabled or unplugged (reverted if you click "Revert")
 - **Clamshell mode** — disable the internal laptop display when external monitors are connected (manual toggle in the toolbar or automatic via daemon preferences); the daemon also monitors the lid state via UPower D-Bus
 - **Confirm-or-revert** — 10-second countdown after applying, auto-reverts if display is unusable
-- **CLI interface** — list, query, and switch profiles from the terminal (`--list-profiles`, `--current-profile`, `--switch-profile`), perfect for hotkey bindings
+- **CLI interface** — list, query, switch, and auto-detect profiles from the terminal (`--list-profiles`, `--current-profile`, `--switch-profile`, `--detect-profile`), perfect for hotkey bindings
 - **Custom config directory** — write generated monitor config files to a custom path instead of the compositor default (via Preferences or `--config-dir`)
 - **Custom config filename** — change the generated file's base name (default `monitors`) from **Preferences → Config Output**; the right extension is added per compositor (`.kdl`/`.conf`/`.lua`) and subdirectories are supported (e.g. `cfg/display`)
-- **Active profile tracking** — the last applied profile is persisted across GUI, CLI, and daemon, queryable via `--current-profile`
+- **Active profile tracking** — `--current-profile` reports the profile matching the live monitor layout, falling back to the last applied one when no profile describes it
 
 ## Installation
 
@@ -183,11 +183,20 @@ monique --current-profile
 # Switch to a profile
 monique --switch-profile "Office"
 
+# Apply the profile matching the connected monitors
+monique --detect-profile
+
+# Print that profile without applying it
+monique --detect-profile --dry-run
+
 # Switch with a custom config output directory
 monique --config-dir ~/my-hypr-config --switch-profile "Office"
 ```
 
 Bind `monique --switch-profile <name>` to any compositor hotkey for quick profile switching.
+
+`--detect-profile` re-runs the same matching the daemon performs on hotplug, useful when
+monitors changed while the machine was off or asleep and no hotplug event was seen.
 
 ### Daemon
 

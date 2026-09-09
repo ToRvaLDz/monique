@@ -65,17 +65,13 @@ def detect_backend() -> IPCBackend | None:
     return None
 
 
-def detect_current_profile(
-    manager: ProfileManager | None = None,
-    ipc: IPCBackend | None = None,
+def _match(
+    manager: ProfileManager | None,
+    ipc: IPCBackend | None,
+    *,
+    exact_config: bool,
 ) -> Profile | None:
-    """Return the saved profile that matches the live compositor layout.
-
-    Matching is exact (position/scale/transform/resolution of every monitor),
-    the same criterion the GUI uses to preselect a profile.  Returns ``None``
-    when no compositor is reachable or no saved profile describes the current
-    layout.
-    """
+    """Match the live compositor layout against the saved profiles."""
     ipc = ipc or detect_backend()
     if ipc is None:
         return None
@@ -91,4 +87,31 @@ def detect_current_profile(
         return None
 
     manager = manager or ProfileManager()
-    return manager.find_best_match(fingerprint, monitors, exact_config=True)
+    return manager.find_best_match(fingerprint, monitors, exact_config=exact_config)
+
+
+def detect_current_profile(
+    manager: ProfileManager | None = None,
+    ipc: IPCBackend | None = None,
+) -> Profile | None:
+    """Return the saved profile that describes the live layout.
+
+    Matching is exact (position/scale/transform/resolution of every monitor),
+    the same criterion the GUI uses to preselect a profile: it answers "which
+    profile is applied right now".  Returns ``None`` when no compositor is
+    reachable or no saved profile describes the current layout.
+    """
+    return _match(manager, ipc, exact_config=True)
+
+
+def detect_best_profile(
+    manager: ProfileManager | None = None,
+    ipc: IPCBackend | None = None,
+) -> Profile | None:
+    """Return the profile best suited to the connected monitors.
+
+    Matching is by fingerprint, the same criterion the daemon uses on hotplug:
+    it answers "which profile *should* be applied", regardless of the layout
+    in place, so it also works when the wrong profile is currently active.
+    """
+    return _match(manager, ipc, exact_config=False)

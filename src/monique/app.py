@@ -5,14 +5,19 @@ from __future__ import annotations
 import json
 import sys
 import time
+from typing import TYPE_CHECKING
 
 import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 from gi.repository import Adw, Gio
 
-from .utils import APP_ID, get_active_profile, save_active_profile
+from .models import Profile
 from .profile_manager import ProfileManager
+from .utils import APP_ID, get_active_profile, save_active_profile
+
+if TYPE_CHECKING:
+    from .detect import IPCBackend
 
 
 class MonitorApp(Adw.Application):
@@ -53,9 +58,24 @@ def _cmd_current_profile() -> int:
     return 1
 
 
+def _apply(profile: Profile, ipc: IPCBackend, mgr: ProfileManager) -> None:
+    """Apply a profile through the compositor and record it as active."""
+    from .utils import load_app_settings
+
+    settings = load_app_settings()
+    ipc.apply_profile(
+        profile,
+        update_sddm=settings.get("update_sddm", True),
+        update_greetd=settings.get("update_greetd", True),
+        use_description=not settings.get("use_port_names", False),
+    )
+    save_active_profile(profile.name)
+    profile.last_applied_time = time.time()
+    mgr.save(profile)
+
+
 def _cmd_switch_profile(name: str) -> int:
     from .detect import detect_backend
-    from .utils import load_app_settings
 
     mgr = ProfileManager()
     profile = mgr.load(name)
@@ -71,18 +91,30 @@ def _cmd_switch_profile(name: str) -> int:
         print("error: no supported compositor detected", file=sys.stderr)
         return 1
 
-    settings = load_app_settings()
-    ipc.apply_profile(
-        profile,
-        update_sddm=settings.get("update_sddm", True),
-        update_greetd=settings.get("update_greetd", True),
-        use_description=not settings.get("use_port_names", False),
-    )
-    save_active_profile(name)
-    profile.last_applied_time = time.time()
-    mgr.save(profile)
-
+    _apply(profile, ipc, mgr)
     print(name)
+    return 0
+
+
+def _cmd_detect_profile(*, dry_run: bool = False) -> int:
+    """Match the connected monitors against the saved profiles and apply the best one."""
+    from .detect import detect_backend, detect_best_profile
+
+    ipc = detect_backend()
+    if ipc is None:
+        print("error: no supported compositor detected", file=sys.stderr)
+        return 1
+
+    mgr = ProfileManager()
+    profile = detect_best_profile(mgr, ipc)
+    if profile is None:
+        print("error: no profile matches the connected monitors", file=sys.stderr)
+        return 1
+
+    if not dry_run:
+        _apply(profile, ipc, mgr)
+
+    print(profile.name)
     return 0
 
 
@@ -115,6 +147,17 @@ def main() -> None:
         metavar="NAME",
         help="Apply a profile by name and exit",
     )
+    group.add_argument(
+        "--detect-profile",
+        action="store_true",
+        help="Apply the profile matching the connected monitors and exit "
+             "(exit code 1 if none matches)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="With --detect-profile: print the matching profile without applying it",
+    )
 
     # argparse intercetta --help ma lascia passare gli argomenti GTK
     args, remaining = parser.parse_known_args()
@@ -130,6 +173,8 @@ def main() -> None:
         sys.exit(_cmd_current_profile())
     if args.switch_profile:
         sys.exit(_cmd_switch_profile(args.switch_profile))
+    if args.detect_profile:
+        sys.exit(_cmd_detect_profile(dry_run=args.dry_run))
 
     # Nessun flag CLI: avvia la GUI passando gli argomenti residui
     sys.argv = [sys.argv[0]] + remaining
