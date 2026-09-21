@@ -8,6 +8,7 @@ license=('GPL-3.0-or-later')
 depends=(
     'python'
     'python-gobject'
+    'python-cairo'
     'gtk4'
     'libadwaita'
 )
