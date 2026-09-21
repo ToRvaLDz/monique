@@ -18,6 +18,15 @@ jobs:
       - run: pip install ruff
       - run: ruff check src/ tests/
 
+  pkgbuild-sync:
+    name: PKGBUILD sync
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify root and AUR PKGBUILD dependencies match
+        run: bash scripts/check-pkgbuild-sync.sh
+
   test:
     name: Tests
     runs-on: ubuntu-latest
