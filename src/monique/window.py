@@ -31,6 +31,8 @@ from .utils import (
     load_app_settings,
     save_app_settings,
     save_active_profile,
+    get_pinned_profile,
+    save_pinned_profile,
 )
 
 import logging
@@ -184,6 +186,7 @@ class MainWindow(Adw.ApplicationWindow):
         self._base_profile_name: str = ""  # profile before user edits (for revert)
         self._confirm_timer_id: int = 0
         self._confirm_created_paths: list[Path] = []
+        self._previous_pin: tuple[str, list[str]] | None = None  # per il revert
         self._inhibit_profile_switch: bool = False
         self._osd: MonitorOSD | None = None
         self._dirty: bool = False
@@ -1192,6 +1195,14 @@ class MainWindow(Adw.ApplicationWindow):
 
         created_paths = [path for path in config_paths if not path.exists()]
 
+        # Monitor collegati prima dell'apply: disabilitarne uno può mandarlo in
+        # standby e farlo sparire per qualche secondo
+        try:
+            connected = [m.description for m in self._ipc.get_monitors() if m.description]
+        except (OSError, RuntimeError) as e:
+            log.debug("Could not read connected monitors for pin: %s", e)
+            connected = []
+
         # Backup
         for path in config_paths:
             backup_file(path)
@@ -1205,6 +1216,7 @@ class MainWindow(Adw.ApplicationWindow):
                 use_description=use_desc, hypr_config_format=hypr_fmt,
             )
             self._set_status("Configuration applied")
+            self._pin_applied_profile(connected)
         except (OSError, RuntimeError, subprocess.CalledProcessError) as e:
             self._toast(f"Apply failed: {e}")
             for path in config_paths:
@@ -1218,6 +1230,21 @@ class MainWindow(Adw.ApplicationWindow):
 
         # Show confirmation dialog with countdown
         self._show_confirm_dialog(config_paths, created_paths)
+
+    def _pin_applied_profile(self, connected: list[str]) -> None:
+        """Tell the daemon this profile is the user's choice for these monitors.
+
+        Written at apply time, not on confirm: the daemon reacts to the
+        standby flap within the confirm countdown.  Revert restores the
+        previous pin.  An unsaved layout has no profile to pin, so the pin
+        is cleared and the daemon goes back to best match.
+        """
+        self._previous_pin = get_pinned_profile()
+        saved = self._current_profile_name and self._profile_mgr.load(self._current_profile_name)
+        if saved and connected:
+            save_pinned_profile(self._current_profile_name, connected)
+        else:
+            save_pinned_profile(None)
 
     def _migrate_orphaned_workspaces(self, profile: Profile) -> None:
         """Move workspaces from disabled/removed monitors to the primary monitor."""
@@ -1296,6 +1323,12 @@ class MainWindow(Adw.ApplicationWindow):
             self._do_revert()
 
     def _do_revert(self) -> None:
+        # Il pin scritto dall'apply annullato non deve sopravvivere al revert
+        if self._previous_pin:
+            save_pinned_profile(*self._previous_pin)
+        else:
+            save_pinned_profile(None)
+
         # Restore migrated workspaces to their original monitors
         for ws_name, original_monitor in self._migrated_workspaces:
             try:

@@ -14,7 +14,7 @@ from gi.repository import Adw, Gio
 
 from .models import Profile
 from .profile_manager import ProfileManager
-from .utils import APP_ID, get_active_profile, save_active_profile
+from .utils import APP_ID, get_active_profile, save_active_profile, save_pinned_profile
 
 if TYPE_CHECKING:
     from .detect import IPCBackend
@@ -58,11 +58,16 @@ def _cmd_current_profile() -> int:
     return 1
 
 
-def _apply(profile: Profile, ipc: IPCBackend, mgr: ProfileManager) -> None:
-    """Apply a profile through the compositor and record it as active."""
+def _apply(profile: Profile, ipc: IPCBackend, mgr: ProfileManager, *, pin: bool) -> None:
+    """Apply a profile through the compositor and record it as active.
+
+    *pin* marks an explicit user choice the daemon must respect for the
+    monitors connected right now; an automatic pick clears the pin.
+    """
     from .utils import load_app_settings
 
     settings = load_app_settings()
+    connected = [m.description for m in ipc.get_monitors() if m.description]
     ipc.apply_profile(
         profile,
         update_sddm=settings.get("update_sddm", True),
@@ -70,6 +75,10 @@ def _apply(profile: Profile, ipc: IPCBackend, mgr: ProfileManager) -> None:
         use_description=not settings.get("use_port_names", False),
     )
     save_active_profile(profile.name)
+    if pin and connected:
+        save_pinned_profile(profile.name, connected)
+    else:
+        save_pinned_profile(None)
     profile.last_applied_time = time.time()
     mgr.save(profile)
 
@@ -91,7 +100,7 @@ def _cmd_switch_profile(name: str) -> int:
         print("error: no supported compositor detected", file=sys.stderr)
         return 1
 
-    _apply(profile, ipc, mgr)
+    _apply(profile, ipc, mgr, pin=True)
     print(name)
     return 0
 
@@ -112,7 +121,7 @@ def _cmd_detect_profile(*, dry_run: bool = False) -> int:
         return 1
 
     if not dry_run:
-        _apply(profile, ipc, mgr)
+        _apply(profile, ipc, mgr, pin=False)
 
     print(profile.name)
     return 0

@@ -15,7 +15,7 @@ from .dbus_events import SystemBusWatcher
 from .detect import detect_backend
 from .models import Profile, apply_clamshell, undo_clamshell
 from .profile_manager import ProfileManager
-from .utils import load_app_settings, save_active_profile
+from .utils import get_pinned_profile, load_app_settings, save_active_profile
 
 try:
     import pyudev
@@ -180,7 +180,10 @@ class MonitorDaemon:
             settings = load_app_settings()
             clamshell = settings.get("clamshell_mode", False)
 
-            profile = self._profile_mgr.find_best_match(fingerprint, monitors)
+            profile = (
+                self._pinned_profile(fingerprint)
+                or self._profile_mgr.find_best_match(fingerprint, monitors)
+            )
             if profile:
                 # Skip if we just applied the same profile
                 if not force and profile.name == self._last_applied_profile:
@@ -312,6 +315,28 @@ class MonitorDaemon:
                     log.info("No matching profile found")
         except (OSError, RuntimeError) as e:
             log.error("Failed to apply profile: %s", e)
+
+    def _pinned_profile(self, fingerprint: list[str]) -> Profile | None:
+        """Return the profile the user chose for exactly these monitors, if any.
+
+        Best-match alone cannot tell "Samsung plugged back in" from "Samsung
+        disabled by the user, then back from standby as connected-but-off":
+        both show the same monitors, and the ranking prefers the profile
+        with more external monitors enabled.  The user's explicit choice for
+        this monitor set breaks the tie.
+        """
+        pin = get_pinned_profile()
+        if pin is None:
+            return None
+        name, pinned_fingerprint = pin
+        if pinned_fingerprint != fingerprint:
+            return None
+        profile = self._profile_mgr.load(name)
+        if profile is None:
+            log.info("Pinned profile %s no longer exists, ignoring pin", name)
+            return None
+        log.info("Using profile %s pinned for these monitors", name)
+        return profile
 
     # ── Eventi di sistema (coperchio, risveglio) ────────────────────
 

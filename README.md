@@ -212,6 +212,8 @@ systemctl --user enable --now moniqued
 
 The daemon auto-detects the active compositor and listens for monitor hotplug events. When a monitor is connected or disconnected, it waits 500ms (debounce) then applies the best matching profile. On Niri, the daemon uses udev DRM events (via `pyudev`) for reliable hardware hotplug detection. Orphaned workspaces are automatically migrated to the primary monitor on Hyprland/Sway (configurable via **Preferences > Migrate workspaces**).
 
+A profile you apply explicitly (from the GUI or with `--switch-profile`) is remembered for the set of monitors connected at that moment: whenever exactly those monitors are connected, the daemon re-applies your choice instead of picking the best match on its own. This keeps a monitor you disabled switched off even when it drops into standby and comes back as connected. Connecting a different set of monitors falls back to best-match; applying an unsaved layout or running `--detect-profile` clears the remembered choice.
+
 #### Clamshell mode
 
 On laptops, the daemon can automatically disable the internal display when external monitors are connected. Enable it from the GUI: **Menu > Preferences > Clamshell Mode**.

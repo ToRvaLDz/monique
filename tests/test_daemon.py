@@ -12,6 +12,7 @@ import asyncio
 from monique.daemon import MonitorDaemon
 from monique.models import MonitorConfig, Profile
 from monique.profile_manager import ProfileManager
+from monique.utils import get_pinned_profile, save_app_settings, save_pinned_profile
 
 
 class _FakeIPC:
@@ -156,6 +157,79 @@ def test_unchanged_fingerprint_does_not_reapply() -> None:
         assert ipc.applied == ["Full", "Full"]
 
     asyncio.run(scenario())
+
+
+_FOUR_SAMSUNG_OFF = [
+    _mon("DP-2", "LG HDR 4K"),
+    _mon("DP-3", "AOC 2757"),
+    _mon("HDMI-A-1", "Samsung C27JG5x", enabled=False),
+    _mon("eDP-2", "AU Optronics", enabled=False),
+]
+
+
+def test_pinned_profile_survives_the_standby_flap_it_causes() -> None:
+    """The user picks LG+AOC with every monitor plugged in.
+
+    Disabling the Samsung sends it into standby: it drops out and comes
+    back as connected-but-off.  Without the pin the daemon ranks Full above
+    LG+AOC (more external monitors enabled) and turns the Samsung back on.
+    """
+    _save_profiles()
+    save_pinned_profile("LG+AOC", [m.description for m in _FOUR])
+
+    daemon = MonitorDaemon()
+    ipc = _FakeIPC(_FOUR_SAMSUNG_OFF)
+
+    async def scenario() -> None:
+        ipc.monitors = _THREE
+        await daemon._apply_best_profile(ipc)
+        ipc.monitors = _FOUR_SAMSUNG_OFF
+        await daemon._apply_best_profile(ipc)
+        await daemon._apply_best_profile(ipc, force=True)
+
+    asyncio.run(scenario())
+
+    assert "Full" not in ipc.applied
+    assert ipc.applied == ["LG+AOC", "LG+AOC"]
+
+
+def test_pin_is_ignored_for_a_different_monitor_set() -> None:
+    """A pin only speaks for the monitors it was chosen with."""
+    _save_profiles()
+    save_pinned_profile("Full", [m.description for m in _FOUR])
+
+    ipc = _FakeIPC(_THREE)
+    asyncio.run(MonitorDaemon()._apply_best_profile(ipc, force=True))
+
+    assert ipc.applied == ["LG+AOC"]
+
+
+def test_pin_to_a_deleted_profile_falls_back_to_best_match() -> None:
+    _save_profiles()
+    save_pinned_profile("Gone", [m.description for m in _FOUR])
+
+    ipc = _FakeIPC(_FOUR)
+    asyncio.run(MonitorDaemon()._apply_best_profile(ipc, force=True))
+
+    assert ipc.applied == ["Full"]
+
+
+def test_daemon_apply_does_not_move_the_pin() -> None:
+    """Only the user pins: automatic applies leave the choice alone."""
+    _save_profiles()
+    save_pinned_profile("LG+AOC", [m.description for m in _FOUR])
+
+    ipc = _FakeIPC(_THREE)
+    asyncio.run(MonitorDaemon()._apply_best_profile(ipc, force=True))
+
+    assert get_pinned_profile() == ("LG+AOC", sorted(m.description for m in _FOUR))
+
+
+def test_malformed_pin_is_ignored() -> None:
+    save_app_settings({"pinned_profile": {"name": 3, "fingerprint": "x"}})
+    assert get_pinned_profile() is None
+    save_app_settings({"pinned_profile": None})
+    assert get_pinned_profile() is None
 
 
 # ── Eventi di sistema: risveglio e coperchio ────────────────────────

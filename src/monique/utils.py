@@ -274,3 +274,29 @@ def save_active_profile(name: str | None) -> None:
 def get_active_profile() -> str | None:
     """Return the name of the last applied profile, or None."""
     return load_app_settings().get("active_profile")
+
+
+def save_pinned_profile(name: str | None, fingerprint: list[str] | None = None) -> None:
+    """Remember the profile the user chose for this exact set of monitors.
+
+    The daemon re-applies it whenever the same monitors are connected,
+    instead of picking the best match on its own.  ``None`` clears the pin.
+    """
+    pin = {"name": name, "fingerprint": sorted(fingerprint or [])} if name else None
+    settings = load_app_settings()
+    write_json(_settings_path(), {**settings, "pinned_profile": pin})
+
+
+def get_pinned_profile() -> tuple[str, list[str]] | None:
+    """Return ``(name, fingerprint)`` of the user-pinned profile, or None."""
+    pin = load_app_settings().get("pinned_profile")
+    if not isinstance(pin, dict):
+        return None
+    name = pin.get("name")
+    fingerprint = pin.get("fingerprint")
+    # Il file è modificabile a mano: si scarta tutto ciò che non ha la forma attesa
+    if not isinstance(name, str) or not name or not isinstance(fingerprint, list):
+        return None
+    if not fingerprint or not all(isinstance(d, str) for d in fingerprint):
+        return None
+    return name, sorted(fingerprint)
