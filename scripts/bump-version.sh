@@ -16,6 +16,11 @@ fi
 
 ROOT="$(git rev-parse --show-toplevel)"
 
+# Le note della release vengono lette da release-notes/v<version>.md
+if [[ ! -f "$ROOT/release-notes/v$NEW.md" ]]; then
+    echo "Warning: release-notes/v$NEW.md not found, GitHub will auto-generate the notes"
+fi
+
 # pyproject.toml
 sed -i "s/^version = \".*\"/version = \"$NEW\"/" "$ROOT/pyproject.toml"
 

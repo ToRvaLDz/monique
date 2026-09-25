@@ -54,9 +54,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Note per versione: un file generico verrebbe riusato da ogni tag successivo
+          NOTES_FILE="release-notes/${{ github.ref_name }}.md"
           NOTES_ARGS=""
-          if [ -f RELEASE_NOTES.md ]; then
-            NOTES_ARGS="--notes-file RELEASE_NOTES.md"
+          if [ -f "$NOTES_FILE" ]; then
+            NOTES_ARGS="--notes-file $NOTES_FILE"
           else
             NOTES_ARGS="--generate-notes"
           fi
