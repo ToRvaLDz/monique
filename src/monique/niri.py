@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import socket
@@ -30,6 +31,8 @@ from .utils import (
     write_text,
     backup_file,
 )
+
+log = logging.getLogger(__name__)
 
 
 def read_focus_at_startup() -> list[str]:
@@ -276,6 +279,34 @@ class NiriIPC:
         _ensure_niri_config_include()
 
         # No explicit reload needed — Niri watches config files
+        self._sync_output_power(profile)
+
+    def _sync_output_power(self, profile: Profile) -> None:
+        """Force each connected output on or off as the profile says.
+
+        ``niri msg output <name> on|off`` (e.g. from an idle script) leaves a
+        temporary override that wins over the config file until that output's
+        block in the file changes.  Re-applying a profile whose block is
+        unchanged would then leave the override in place; an explicit IPC
+        action replaces it.  Only outputs whose live state disagrees are
+        touched, so no new override appears where the config already agrees.
+        """
+        try:
+            live = {m.description: m for m in self.get_monitors() if m.description}
+        except (OSError, RuntimeError, ValueError) as e:
+            log.warning("Cannot read Niri outputs to sync power state: %s", e)
+            return
+
+        for mon in profile.monitors:
+            cur = live.get(mon.description)
+            if cur is None or cur.enabled == mon.enabled:
+                continue
+            action = "On" if mon.enabled else "Off"
+            request = {"Output": {"output": cur.name, "action": action}}
+            try:
+                self._request(json.dumps(request))
+            except (OSError, RuntimeError, ValueError) as e:
+                log.warning("Cannot turn %s %s: %s", cur.name, action.lower(), e)
 
     async def connect_event_socket(self) -> AsyncIterator[dict]:
         """Connect to EventStream and yield events indicating output changes.
