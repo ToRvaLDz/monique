@@ -10,3 +10,7 @@ CLAUDE.md
 pkg/
 *.pkg.tar.zst
 *.log
+.trailhead/session-ticket
+.trailhead/uat-backfill
+.trailhead/work-state.json
+.trailhead/isolation-answer.json
