@@ -424,6 +424,24 @@ class MainWindow(Adw.ApplicationWindow):
         entry_config_name.connect("changed", self._on_config_name_changed)
         grp_out.add(entry_config_name)
 
+        # ── kanshi group ──
+        grp_kanshi = Adw.PreferencesGroup(
+            title="kanshi",
+            description=(
+                "Add 'include ~/.config/kanshi/monitors.kanshi' to your kanshi "
+                "config once. Run either kanshi or moniqued, not both."
+            ),
+        )
+        page.add(grp_kanshi)
+
+        sw_kanshi = Adw.SwitchRow(
+            title="Generate kanshi config",
+            subtitle="Write all saved profiles to a .kanshi file on every apply",
+        )
+        sw_kanshi.set_active(self._app_settings.get("kanshi_config", False))
+        sw_kanshi.connect("notify::active", self._on_kanshi_switch_changed)
+        grp_kanshi.add(sw_kanshi)
+
         # ── Hyprland config format group ──
         if is_hyprland_installed():
             grp_hypr = Adw.PreferencesGroup(
@@ -558,6 +576,14 @@ class MainWindow(Adw.ApplicationWindow):
         state = "enabled" if new_val else "disabled"
         self._toast(f"Workspace migration {state}")
 
+    def _on_kanshi_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
+        """Handle the kanshi config switch toggle in preferences."""
+        new_val = row.get_active()
+        self._app_settings["kanshi_config"] = new_val
+        save_app_settings(self._app_settings)
+        state = "enabled" if new_val else "disabled"
+        self._toast(f"kanshi config generation {state}")
+
     def _on_port_names_switch_changed(self, row: Adw.SwitchRow, pspec) -> None:
         """Handle the port names switch toggle in preferences."""
         new_val = row.get_active()
@@ -587,7 +613,7 @@ class MainWindow(Adw.ApplicationWindow):
         return (
             "Relative to the compositor config directory.\n"
             f"Files: {effective}.kdl (Niri), {effective}.conf (Sway/Hyprland), "
-            f"{effective}.lua (Hyprland Lua)"
+            f"{effective}.lua (Hyprland Lua), {effective}.kanshi (kanshi)"
         )
 
     def _on_config_name_changed(self, row: Adw.EntryRow) -> None:
