@@ -147,8 +147,14 @@ pip install monique
 ```bash
 git clone https://github.com/ToRvaLDz/monique.git
 cd monique
-pip install .
+python3 -m venv --system-site-packages .venv
+.venv/bin/pip install .
+.venv/bin/monique
 ```
+
+Most distros refuse a system-wide `pip install`, so this uses a virtual environment that reuses the system PyGObject. On Debian and Ubuntu, install `python3-venv` first.
+
+Requires Python 3.11+ and PyGObject 3.46+, so Debian 12 and Ubuntu 22.04 are too old for this method.
 
 **Runtime dependencies:**
 
