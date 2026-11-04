@@ -19,6 +19,7 @@ from monique.config_paths import (
     sway_monitors_path,
 )
 from monique.hyprland import HyprlandIPC
+from monique.kanshi_config import kanshi_monitors_path
 from monique.niri import NiriIPC
 from monique.sway import SwayIPC
 
@@ -53,7 +54,7 @@ def _neutralise_side_effects(monkeypatch, primary):
 def _files_on_disk(root):
     return {
         p
-        for sub in ("hypr", "sway", "niri")
+        for sub in ("hypr", "sway", "niri", "kanshi")
         if (root / sub).is_dir()
         for p in (root / sub).iterdir()
         if p.name not in NOT_GENERATED and p.suffix != ".bak"
@@ -71,9 +72,11 @@ def _installation_matrix(primary):
 
 @pytest.mark.parametrize("primary", [HYPRLAND, SWAY, NIRI])
 @pytest.mark.parametrize("fmt", ["both", "legacy", "lua"])
+@pytest.mark.parametrize("kanshi", [True, False])
 def test_declared_paths_are_exactly_the_files_written(
-    isolated_config, monkeypatch, profile, primary, fmt,
+    isolated_config, monkeypatch, profile, primary, fmt, kanshi,
 ):
+    utils.save_app_settings({"kanshi_config": kanshi})
     for hyprland, sway, niri in _installation_matrix(primary):
         _set_installed(monkeypatch, primary, hyprland=hyprland, sway=sway, niri=niri)
         _neutralise_side_effects(monkeypatch, primary)
@@ -86,7 +89,7 @@ def test_declared_paths_are_exactly_the_files_written(
         ipc.apply_profile(profile, hypr_config_format=fmt, use_description=False)
 
         assert declared == _files_on_disk(isolated_config), (
-            f"{primary} hyprland={hyprland} sway={sway} niri={niri} fmt={fmt}"
+            f"{primary} hyprland={hyprland} sway={sway} niri={niri} fmt={fmt} kanshi={kanshi}"
         )
 
 
@@ -109,6 +112,19 @@ def test_cross_writes_are_included(monkeypatch):
     assert niri_monitors_path() in paths
     assert any(p.name == "monitors.lua" for p in paths)
     assert not any(p.name == "monitors.conf" and "hypr" in p.parts for p in paths)
+
+
+@pytest.mark.parametrize("primary", [HYPRLAND, SWAY, NIRI])
+def test_kanshi_file_is_declared_only_when_enabled(monkeypatch, primary):
+    _set_installed(monkeypatch, primary, hyprland=True, sway=True, niri=True)
+
+    assert kanshi_monitors_path() not in compositor_config_paths(primary)
+
+    utils.save_app_settings({"kanshi_config": True})
+    paths = compositor_config_paths(primary)
+
+    assert kanshi_monitors_path() in paths
+    assert paths[-1] == kanshi_monitors_path()
 
 
 def test_absent_compositors_are_not_declared(monkeypatch):

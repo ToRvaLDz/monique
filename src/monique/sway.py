@@ -17,8 +17,10 @@ from .config_paths import (
     sway_monitors_path,
 )
 from .hypr_config import write_hyprland_configs
+from .kanshi_config import write_kanshi_config
 from .models import MonitorConfig, Profile
 from .utils import (
+    is_kanshi_config_enabled,
     is_hyprland_installed,
     is_niri_installed,
     is_sddm_running,
@@ -137,6 +139,10 @@ class SwayIPC:
             niri_conf = niri_monitors_path()
             backup_file(niri_conf)
             write_text(niri_conf, profile.generate_niri_config(use_description=use_description))
+
+        # Also write the kanshi config if the user opted in
+        if is_kanshi_config_enabled():
+            write_kanshi_config(profile, use_description)
 
         # Write SDDM Xsetup script if enabled and SDDM is present
         if update_sddm and is_sddm_running():

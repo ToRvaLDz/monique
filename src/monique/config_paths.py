@@ -12,9 +12,11 @@ from __future__ import annotations
 from pathlib import Path
 
 from .hypr_config import hyprland_config_paths
+from .kanshi_config import kanshi_monitors_path
 from .utils import (
     get_monitor_config_name,
     is_hyprland_installed,
+    is_kanshi_config_enabled,
     is_niri_installed,
     is_sway_installed,
     niri_config_dir,
@@ -43,7 +45,8 @@ def compositor_config_paths(
     """Return the monitor config files ``apply_profile()`` writes for *primary*.
 
     The primary compositor's own config comes first, followed by the configs
-    cross-written for any other installed compositor.  Privileged files (the
+    cross-written for any other installed compositor and, when the user opted
+    in, the kanshi config.  Privileged files (the
     SDDM Xsetup script and the greetd config) are excluded: they are written
     through ``pkexec`` and are neither backed up nor reverted.
 
@@ -70,5 +73,9 @@ def compositor_config_paths(
         paths.append(sway_monitors_path())
     if primary != NIRI and is_niri_installed():
         paths.append(niri_monitors_path())
+
+    # Opt-in, scritto da write_kanshi_config() con gli altri cross-write
+    if is_kanshi_config_enabled():
+        paths.append(kanshi_monitors_path())
 
     return list(dict.fromkeys(paths))
