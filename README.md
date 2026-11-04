@@ -72,6 +72,7 @@
 - **Profile system** — save, load, and switch between monitor configurations
 - **Hotplug daemon** (`moniqued`) — automatically applies the best matching profile when monitors are connected or disconnected
 - **Display manager integration** — syncs your layout to the login screen for SDDM (xrandr) and greetd (sway), with polkit rule for passwordless writes
+- **kanshi config**: optionally write every saved profile to a `.kanshi` file you can reuse with [kanshi](https://gitlab.freedesktop.org/emersion/kanshi) (see [kanshi export](#kanshi-export))
 - **Workspace rules** — configure workspace-to-monitor assignments (Hyprland/Sway)
 - **HDR & color management** — color management presets, 10-bit output, ICC profiles, SDR brightness/saturation and per-monitor EDID luminance overrides (Hyprland `monitorv2`)
 - **Live preview** — OSD overlay to identify monitors (double-click)
@@ -327,6 +328,32 @@ subdirectories (e.g. `cfg/display` → `cfg/display.kdl` for Niri, `cfg/display.
 For Niri, the `include` line in `config.kdl` is kept in sync with the configured name; if you change
 the name later, update your Hyprland `source`/`require` lines to match.
 
+### kanshi export
+
+Turn on **Preferences → kanshi → Generate kanshi config** (stored as `kanshi_config` in
+`settings.json`, off by default) and every apply also writes all saved profiles to
+`~/.config/kanshi/monitors.kanshi` (the same `monitor_config_name` and `--config-dir` rules as the
+other files, with the `.kanshi` extension). Monique never touches your own `~/.config/kanshi/config`:
+add this line to it once.
+
+```
+include ~/.config/kanshi/monitors.kanshi
+```
+
+kanshi uses the first profile, in file order, whose outputs match the connected monitors exactly,
+so Monique puts the profile you just applied first and the others after it by most recent use.
+Reach any of them with `kanshictl switch <name>`. Monique does not call `kanshictl reload`; kanshi
+reads the file when it starts or reloads.
+
+Limits:
+- Monitors are matched by make, model and serial, so a profile only applies when exactly its
+  monitors are connected. Twin monitors without a serial are matched by connector name.
+- A profile with every monitor disabled is skipped, and so are VRR, HDR, bit depth, mirroring and
+  workspace rules, which kanshi has no equivalent for. A highest-resolution or highest-refresh-rate
+  mode is left out and kanshi picks its own.
+- Do not run kanshi and `moniqued` together: both react to hotplug and pick profiles by different
+  rules, so the layout flips between them.
+
 ## Project structure
 
 ```
@@ -341,6 +368,7 @@ src/monique/
 ├── sway.py              # Sway IPC client (binary i3-ipc)
 ├── niri.py              # Niri IPC client (JSON socket)
 ├── daemon.py            # Hotplug daemon (moniqued)
+├── kanshi_config.py     # kanshi config generator
 ├── profile_manager.py   # Profile save/load/match
 └── utils.py             # Paths, file I/O, helpers
 ```
