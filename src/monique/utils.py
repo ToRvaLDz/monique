@@ -22,7 +22,7 @@ DEFAULT_HYPR_FORMAT = HYPR_FORMAT_BOTH
 
 # Base name (senza estensione) dei file di config monitor generati.  L'estensione
 # la aggiunge ogni compositore: ``.kdl`` (Niri), ``.conf`` (Sway/Hyprland legacy),
-# ``.lua`` (Hyprland >= 0.55).  Può includere sottocartelle relative alla config
+# ``.lua`` (Hyprland >= 0.55), ``.kanshi`` (kanshi).  Può includere sottocartelle relative alla config
 # dir del compositore (es. ``cfg/display``).  Il default riproduce i nomi storici.
 DEFAULT_MONITOR_CONFIG_NAME = "monitors"
 
@@ -98,6 +98,15 @@ def niri_config_dir() -> Path:
         return override
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "niri"
+
+
+def kanshi_config_dir() -> Path:
+    """Return the kanshi config directory."""
+    override = _config_dir_override()
+    if override:
+        return override
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "kanshi"
 
 
 def hyprland_runtime_dir() -> Path:
@@ -220,7 +229,7 @@ def get_hypr_config_format() -> str:
 
 # Estensioni note che l'utente potrebbe digitare per errore nel base name:
 # le rimuoviamo così che ``display.kdl`` non diventi ``display.kdl.conf``.
-_MONITOR_CONFIG_EXTS = (".kdl", ".conf", ".lua")
+_MONITOR_CONFIG_EXTS = (".kdl", ".conf", ".lua", ".kanshi")
 
 
 def sanitize_monitor_config_name(value: object) -> str:
@@ -231,7 +240,7 @@ def sanitize_monitor_config_name(value: object) -> str:
 
     - i separatori vengono normalizzati a ``/`` (POSIX), come si scrivono nei
       config di Niri/Hyprland;
-    - un'estensione nota digitata per errore (``.kdl``/``.conf``/``.lua``) viene
+    - un'estensione nota digitata per errore (``.kdl``/``.conf``/``.lua``/``.kanshi``) viene
       rimossa: l'estensione la aggiunge il compositore;
     - percorsi assoluti, segmenti ``..``, ``.`` e componenti vuoti vengono
       rifiutati (niente traversal fuori dalla config dir);
@@ -263,6 +272,15 @@ def get_monitor_config_name() -> str:
     return sanitize_monitor_config_name(
         load_app_settings().get("monitor_config_name")
     )
+
+
+def is_kanshi_config_enabled() -> bool:
+    """Return True if the user opted in to writing the kanshi config.
+
+    Volutamente non legato alla presenza del binario: il file serve anche per
+    riusare il layout su un'altra macchina, dove kanshi gira.
+    """
+    return load_app_settings().get("kanshi_config") is True
 
 
 def save_active_profile(name: str | None) -> None:

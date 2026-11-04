@@ -44,6 +44,7 @@ def test_sanitize_strips_typed_extension() -> None:
     assert sanitize_monitor_config_name("display.kdl") == "display"
     assert sanitize_monitor_config_name("cfg/display.CONF") == "cfg/display"
     assert sanitize_monitor_config_name("display.lua") == "display"
+    assert sanitize_monitor_config_name("display.kanshi") == "display"
 
 
 def test_sanitize_normalizes_backslashes_and_dot_segments() -> None:
