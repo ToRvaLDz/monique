@@ -13,6 +13,7 @@ from .workspace_panel import WorkspacePanel
 from .profile_manager import ProfileManager
 from .models import MonitorConfig, Profile, WorkspaceRule, monitor_matches_identifier
 from .hypr_config import hyprland_config_paths, read_default_monitor, read_icc_profiles
+from .kanshi_config import kanshi_monitors_path
 from .hyprland import HyprlandIPC
 from .niri import NiriIPC, read_focus_at_startup
 from .sway import SwayIPC
@@ -428,7 +429,7 @@ class MainWindow(Adw.ApplicationWindow):
         grp_kanshi = Adw.PreferencesGroup(
             title="kanshi",
             description=(
-                "Add 'include ~/.config/kanshi/monitors.kanshi' to your kanshi "
+                f"Add 'include {kanshi_monitors_path()}' to your kanshi "
                 "config once. Run either kanshi or moniqued, not both."
             ),
         )
