@@ -26,6 +26,9 @@ DEFAULT_HYPR_FORMAT = HYPR_FORMAT_BOTH
 # dir del compositore (es. ``cfg/display``).  Il default riproduce i nomi storici.
 DEFAULT_MONITOR_CONFIG_NAME = "monitors"
 
+# Nomi del processo del demone; il secondo è lo script wrappato da Nix
+_MONIQUED_NAMES = frozenset({"moniqued", ".moniqued-wrapped"})
+
 # Override runtime impostato via --config-dir (priorità su settings.json)
 _runtime_config_dir: str | None = None
 
@@ -281,6 +284,47 @@ def is_kanshi_config_enabled() -> bool:
     riusare il layout su un'altra macchina, dove kanshi gira.
     """
     return load_app_settings().get("kanshi_config") is True
+
+
+def _is_moniqued_argv(argv: list[str]) -> bool:
+    """Return True if a command line is moniqued, run directly or through Python."""
+    if not argv:
+        return False
+    program = Path(argv[0]).name
+    if program in _MONIQUED_NAMES:
+        return True
+    if not program.startswith("python"):
+        return False
+    script = next((arg for arg in argv[1:] if not arg.startswith("-")), "")
+    return Path(script).name in _MONIQUED_NAMES
+
+
+def is_moniqued_running(proc_root: Path = Path("/proc")) -> bool:
+    """Return True if this user has a moniqued process running.
+
+    Legge /proc invece di chiedere a systemd, così vede anche un demone avviato
+    a mano.  Il confronto è sull'eseguibile: ``vim moniqued`` non conta.
+    """
+    try:
+        entries = list(proc_root.iterdir())
+    except OSError:
+        return False
+    uid = os.getuid()
+    for entry in entries:
+        if not entry.name.isdigit():
+            continue
+        cmdline = entry / "cmdline"
+        try:
+            if cmdline.stat().st_uid != uid:
+                continue
+            raw = cmdline.read_bytes()
+        except OSError:
+            # Il processo può terminare tra la lista e la lettura
+            continue
+        argv = [os.fsdecode(arg) for arg in raw.split(b"\0") if arg]
+        if _is_moniqued_argv(argv):
+            return True
+    return False
 
 
 def save_active_profile(name: str | None) -> None:

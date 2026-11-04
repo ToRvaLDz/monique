@@ -359,7 +359,8 @@ Limits:
   highest-resolution or highest-refresh-rate mode is left out and kanshi picks its own.
 - kanshi cannot mirror, so a mirrored monitor is exported as a normal output at its stored position.
 - Do not run kanshi and `moniqued` together: both react to hotplug and pick profiles by different
-  rules, so the layout flips between them.
+  rules, so the layout flips between them. Preferences warns you when the export is on and
+  `moniqued` is running, but does not stop it.
 
 ## Project structure
 
