@@ -348,9 +348,9 @@ reads the file when it starts or reloads.
 Limits:
 - Monitors are matched by make, model and serial, so a profile only applies when exactly its
   monitors are connected. Twin monitors without a serial are matched by connector name.
-- A profile with every monitor disabled is skipped, and so are VRR, HDR, bit depth and workspace
-  rules, which kanshi has no equivalent for. A highest-resolution or highest-refresh-rate mode is
-  left out and kanshi picks its own.
+- A profile with every monitor disabled is skipped. HDR, bit depth and workspace rules are left
+  out, as kanshi has no equivalent. VRR is not exported either, so kanshi leaves it as it is. A
+  highest-resolution or highest-refresh-rate mode is left out and kanshi picks its own.
 - kanshi cannot mirror, so a mirrored monitor is exported as a normal output at its stored position.
 - Do not run kanshi and `moniqued` together: both react to hotplug and pick profiles by different
   rules, so the layout flips between them.
