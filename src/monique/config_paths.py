@@ -19,6 +19,7 @@ from .utils import (
     is_kanshi_config_enabled,
     is_niri_installed,
     is_sway_installed,
+    is_umbriel_installed,
     niri_config_dir,
     sway_config_dir,
     umbriel_config_dir,
@@ -89,6 +90,8 @@ def compositor_config_paths(
         paths.append(sway_monitors_path())
     if primary != NIRI and is_niri_installed():
         paths.append(niri_monitors_path())
+    if primary != UMBRIEL and is_umbriel_installed():
+        paths.append(umbriel_monitors_path())
 
     # Opt-in, scritto da write_kanshi_config() con gli altri cross-write
     if is_kanshi_config_enabled():

@@ -56,6 +56,49 @@ def umbriel_socket_path() -> str:
     return str(Path(runtime) / f"umbriel-{display}.sock")
 
 
+def env_umbriel_socket() -> str | None:
+    """Return ``$UMBRIEL_SOCKET`` when it belongs to the session we run in.
+
+    Umbriel intitola il socket al proprio display Wayland: se
+    ``$WAYLAND_DISPLAY`` è un altro, la variabile è ereditata da un Umbriel
+    esterno (Niri o Sway annidati dentro Umbriel) e va ignorata.
+    """
+    sock = os.environ.get("UMBRIEL_SOCKET")
+    if not sock:
+        return None
+    display = os.environ.get("WAYLAND_DISPLAY")
+    if display and Path(sock).name != f"umbriel-{display}.sock":
+        return None
+    return sock
+
+
+def _accepts_connections(path: Path) -> bool:
+    """True if something listens on *path* (a crashed session leaves a stale file)."""
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(_REQUEST_TIMEOUT_S)
+        sock.connect(str(path))
+    except OSError:
+        return False
+    finally:
+        sock.close()
+    return True
+
+
+def find_umbriel_socket(runtime_dir: Path) -> Path | None:
+    """Scan *runtime_dir* for a live Umbriel socket.
+
+    Prima il nome documentato ``umbriel-$WAYLAND_DISPLAY.sock``, poi gli altri
+    ``umbriel-*.sock`` in ordine alfabetico.
+    """
+    display = os.environ.get("WAYLAND_DISPLAY")
+    candidates = sorted(runtime_dir.glob("umbriel-*.sock"))
+    if display:
+        documented = runtime_dir / f"umbriel-{display}.sock"
+        candidates = [documented, *(c for c in candidates if c != documented)]
+    return next((c for c in candidates if _accepts_connections(c)), None)
+
+
 def _reply_value(response: object) -> object:
     """Unwrap ``{"ok": value}``; ``{"err": msg}`` becomes a RuntimeError."""
     if isinstance(response, dict):

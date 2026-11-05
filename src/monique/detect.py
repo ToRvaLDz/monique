@@ -15,10 +15,11 @@ from .models import Profile
 from .niri import NiriIPC
 from .profile_manager import ProfileManager
 from .sway import SwayIPC
+from .umbriel import UmbrielIPC, env_umbriel_socket, find_umbriel_socket
 
 log = logging.getLogger(__name__)
 
-IPCBackend = HyprlandIPC | NiriIPC | SwayIPC
+IPCBackend = HyprlandIPC | NiriIPC | SwayIPC | UmbrielIPC
 
 
 def detect_backend() -> IPCBackend | None:
@@ -28,6 +29,11 @@ def detect_backend() -> IPCBackend | None:
     for compositor sockets (handles race condition at login when env vars
     are not yet exported to the systemd user manager).
     """
+    # Umbriel per primo: dentro Umbriel annidato in un altro compositore le
+    # variabili dell'esterno restano nell'ambiente, ma il suo socket combacia
+    # solo col display della sessione più interna
+    if env_umbriel_socket():
+        return UmbrielIPC()
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
         return HyprlandIPC()
     if os.environ.get("NIRI_SOCKET"):
@@ -61,6 +67,13 @@ def detect_backend() -> IPCBackend | None:
             os.environ["SWAYSOCK"] = str(sock)
             log.info("Found Sway socket: %s", sock.name)
             return SwayIPC()
+
+    # Umbriel: last, a stale socket file must not hide a live compositor
+    umbriel_sock = find_umbriel_socket(xdg_path)
+    if umbriel_sock:
+        os.environ["UMBRIEL_SOCKET"] = str(umbriel_sock)
+        log.info("Found Umbriel socket: %s", umbriel_sock.name)
+        return UmbrielIPC()
 
     return None
 

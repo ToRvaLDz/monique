@@ -17,8 +17,10 @@ from .config_paths import (
 from .hypr_config import write_hyprland_configs
 from .kanshi_config import write_kanshi_config
 from .models import MonitorConfig, Profile, WorkspaceRule
+from .umbriel_config import write_umbriel_config
 from .utils import (
     is_kanshi_config_enabled,
+    is_umbriel_installed,
     hyprland_runtime_dir,
     is_sway_installed,
     is_niri_installed,
@@ -224,6 +226,10 @@ class HyprlandIPC:
             niri_conf = niri_monitors_path()
             backup_file(niri_conf)
             write_text(niri_conf, profile.generate_niri_config(use_description=use_description))
+
+        # Cross-write the Umbriel monitors file if Umbriel is installed
+        if is_umbriel_installed():
+            write_umbriel_config(profile, use_description)
 
         # Also write the kanshi config if the user opted in
         if is_kanshi_config_enabled():

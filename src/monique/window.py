@@ -17,6 +17,7 @@ from .kanshi_config import kanshi_monitors_path
 from .hyprland import HyprlandIPC
 from .niri import NiriIPC, read_focus_at_startup
 from .sway import SwayIPC
+from .umbriel import UmbrielIPC, env_umbriel_socket, find_umbriel_socket
 from .utils import (
     HYPR_FORMAT_BOTH,
     HYPR_FORMAT_LEGACY,
@@ -55,8 +56,10 @@ _HYPR_FORMAT_CHOICES: tuple[tuple[str, str], ...] = (
 )
 
 
-def _detect_ipc() -> HyprlandIPC | NiriIPC | SwayIPC:
+def _detect_ipc() -> HyprlandIPC | NiriIPC | SwayIPC | UmbrielIPC:
     """Auto-detect the running compositor and return the appropriate IPC client."""
+    if env_umbriel_socket():
+        return UmbrielIPC()
     if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
         return HyprlandIPC()
     if os.environ.get("NIRI_SOCKET"):
@@ -83,6 +86,11 @@ def _detect_ipc() -> HyprlandIPC | NiriIPC | SwayIPC:
         if sock.is_socket():
             os.environ["SWAYSOCK"] = str(sock)
             return SwayIPC()
+
+    umbriel_sock = find_umbriel_socket(xdg)
+    if umbriel_sock:
+        os.environ["UMBRIEL_SOCKET"] = str(umbriel_sock)
+        return UmbrielIPC()
 
     # Default fallback
     return HyprlandIPC()
