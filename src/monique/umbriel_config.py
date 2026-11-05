@@ -290,7 +290,7 @@ _OPTIONAL = ("include", "optional")
 
 _MARKER_RE = re.compile(r"^\s*" + re.escape(MARKER_PREFIX) + r"(.+?)\s*$")
 _FILES_RE = re.compile(r"^(\s*files\s*=\s*)(\[.*\])(\s*(?:#.*)?)$")
-_HEADER_RE = re.compile(r"^\s*\[(?!\[)(.+?)\]\s*(?:#.*)?$")
+_HEADER_RE = re.compile(r"^\s*(\[\[?)(?!\[)(.+?)(\]\]?)\s*(?:#.*)?$")
 _MANAGED_KEY_RE = re.compile(
     r"^\s*(?:%s)\s*=" % "|".join(re.escape(k) for k in MANAGED_KEYS)
 )
@@ -327,7 +327,9 @@ def _header_path(line: str) -> tuple[str, ...] | None:
     if not match:
         return None
     try:
-        node = tomllib.loads(f"[{match.group(1)}]\n")
+        # Anche le tabelle di array ``[[a.b]]`` aprono una sezione
+        opener, name, closer = match.groups()
+        node = tomllib.loads(f"{opener}{name}{closer}\n")
     except tomllib.TOMLDecodeError:
         return None
     path: list[str] = []

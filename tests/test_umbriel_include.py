@@ -247,6 +247,20 @@ def test_later_runs_never_touch_output_tables(cfg):
     assert before != path.read_bytes()  # il rename ha agito, non sulle tabelle
 
 
+def test_array_tables_are_sections_of_their_own(cfg):
+    path = _write(cfg, (
+        '[output.DP-1]\nenabled = true\nworkspaces = 3\n\n'
+        '[[workspace]]\nname = "web"\nenabled = true\nmode = "x"\n'
+    ))
+
+    assert ensure_umbriel_include() is True
+
+    data = _load(path)
+    assert data["output"]["DP-1"] == {"workspaces": 3}
+    assert data["workspace"] == [{"name": "web", "enabled": True, "mode": "x"}]
+    assert data["include"]["optional"]["files"] == ["monitors.toml"]
+
+
 # ── unverifiable layouts ─────────────────────────────────────────────────
 
 @pytest.mark.parametrize("text", [
