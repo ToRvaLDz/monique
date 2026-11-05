@@ -191,6 +191,13 @@ def applying(isolated_config, monkeypatch):
     return ipc, state, isolated_config / "umbriel"
 
 
+def _twin(name: str) -> dict:
+    out = copy.deepcopy(_outputs()[1])
+    out.update(name=name, make="AOC", model="m", serial="", enabled=True,
+               config_name="AOC m")
+    return out
+
+
 def _profile(*monitors: MonitorConfig) -> Profile:
     return Profile(name="p", monitors=list(monitors))
 
@@ -252,6 +259,31 @@ def test_power_sync_enables_a_disabled_output(applying):
 
     assert state["sent"] == [
         {"cmd": "action", "action": "output-enable", "output": "V2"}]
+
+
+def test_power_sync_targets_the_right_twin(applying):
+    ipc, state, _ = applying
+    state["outputs"] = [
+        _twin("DP-1"), _twin("DP-2"),
+    ]
+    off = MonitorConfig(name="DP-1", description="AOC m", enabled=False)
+    on = MonitorConfig(name="DP-2", description="AOC m", enabled=True)
+
+    ipc.apply_profile(_profile(off, on), use_description=True)
+
+    assert state["sent"] == [
+        {"cmd": "action", "action": "output-disable", "output": "DP-1"}]
+
+
+def test_power_sync_skips_ambiguous_twins(applying):
+    ipc, state, _ = applying
+    state["outputs"] = [_twin("DP-1"), _twin("DP-2")]
+    # nessun connettore del profilo coincide con quelli vivi
+    off = MonitorConfig(name="DP-7", description="AOC m", enabled=False)
+
+    ipc.apply_profile(_profile(off), use_description=True)
+
+    assert state["sent"] == []
 
 
 def test_unverifiable_config_toml_fails_the_apply(applying):

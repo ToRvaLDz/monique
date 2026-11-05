@@ -228,11 +228,8 @@ class UmbrielIPC:
             log.warning("Cannot read Umbriel outputs to sync power state: %s", e)
             return
 
-        by_desc = {m.description: m for m in live if m.description}
-        by_name = {m.name: m for m in live}
         for mon in profile.monitors:
-            # Senza descrizione il solo identificativo è il connettore
-            cur = by_desc.get(mon.description) if mon.description else by_name.get(mon.name)
+            cur = _live_match(mon, live)
             if cur is None or cur.enabled == mon.enabled:
                 continue
             action = "output-enable" if mon.enabled else "output-disable"
@@ -276,6 +273,23 @@ class UmbrielIPC:
                     yield event
         finally:
             writer.close()
+
+
+def _live_match(mon: MonitorConfig, live: list[MonitorConfig]) -> MonitorConfig | None:
+    """Find the connected output *mon* stands for, None when ambiguous.
+
+    Con la descrizione un solo output vivo basta; i gemelli senza seriale
+    la condividono, quindi si ripiega sul connettore.  Senza corrispondenza
+    univoca meglio non toccare nulla che spegnere il gemello sbagliato.
+    """
+    by_name = [m for m in live if m.name == mon.name]
+    if not mon.description:
+        return by_name[0] if by_name else None
+    twins = [m for m in live if m.description == mon.description]
+    if len(twins) <= 1:
+        return twins[0] if twins else None
+    named = [m for m in twins if m.name == mon.name]
+    return named[0] if len(named) == 1 else None
 
 
 def _parse_line(line: bytes) -> dict | None:
