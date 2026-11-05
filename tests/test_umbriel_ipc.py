@@ -14,6 +14,7 @@ import pytest
 
 from monique.models import MonitorConfig, PositionMode, Profile
 from monique.umbriel import UmbrielIPC
+from monique.umbriel_config import ensure_umbriel_include
 
 FIXTURE = Path(__file__).parent / "fixtures" / "umbriel_outputs.json"
 
@@ -503,3 +504,65 @@ def test_prepare_apply_seed_round_trips_through_restore(applying):
 
     assert fresh[0].transform.name == "FLIPPED_270"
     assert fresh[0].vrr.name == "ON"
+
+
+# ── first apply keeps the user's own settings ────────────────────────────
+
+_USER_OUTPUT = """\
+[general]
+x = 1
+
+[output.{key}]
+hdr = "on"
+bit_depth = 10
+vrr = "fullscreen"
+focus_at_startup = true
+tearing = true
+"""
+
+
+def _check_user_settings_survive(ipc, cfg, key, **kwargs):
+    original = _USER_OUTPUT.format(key=f'"{key}"')
+    (cfg / "config.toml").write_text(original)
+
+    ipc.prepare_apply(**kwargs)
+
+    seed = tomllib.loads((cfg / "monitors.toml").read_text())["output"][key]
+    assert seed["hdr"] == "on"
+    assert seed["bit_depth"] == 10
+    assert seed["vrr"] == "fullscreen"
+    assert seed["focus_at_startup"] is True
+    kept = tomllib.loads((cfg / "config.toml").read_text())["output"][key]
+    assert kept == {"tearing": True}
+    pre = cfg / "config.toml.pre-monique"
+    assert pre.read_bytes() == original.encode()
+
+    # un secondo giro e un ulteriore ensure non toccano la copia
+    (cfg / "monitors.toml").unlink()
+    ipc.prepare_apply()
+    ensure_umbriel_include()
+    assert pre.read_bytes() == original.encode()
+
+
+def test_prepare_apply_keeps_user_settings_by_connector(applying):
+    ipc, _, cfg = applying
+    _check_user_settings_survive(ipc, cfg, "HEADLESS-1")
+
+
+def test_prepare_apply_keeps_user_settings_by_identity(applying):
+    ipc, state, cfg = applying
+    state["outputs"][0].update(make="AOC", model="2757", serial="1",
+                               config_name="PNP(AOC) 2757 1")
+    _check_user_settings_survive(ipc, cfg, "PNP(AOC) 2757 1", use_description=True)
+
+
+def test_prepare_apply_without_output_tables_keeps_live_values(applying):
+    ipc, state, cfg = applying
+    state["outputs"][0].update(adaptive_sync=True)
+
+    ipc.prepare_apply()
+
+    seed = tomllib.loads((cfg / "monitors.toml").read_text())["output"]["HEADLESS-1"]
+    assert seed["vrr"] == "always"
+    assert seed["hdr"] == "off"
+    assert seed["bit_depth"] == 8

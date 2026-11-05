@@ -593,6 +593,24 @@ def _initial_text(config: Path) -> str | None:
     return _read_utf8(packaged)
 
 
+def _is_first_run(text: str) -> bool:
+    """True if *text* has no include managed by Monique yet (nothing migrated)."""
+    lines = text.splitlines(keepends=True)
+    return _find_managed(lines, _line_sections(lines)) is None
+
+
+def _keep_original(config: Path, text: str) -> None:
+    """Write the untouched config.toml once to ``config.toml.pre-monique``.
+
+    Il ``.bak`` viene sovrascritto a ogni apply; questa copia no: non viene mai
+    riscritta né cancellata.  Non è config generata (non sta in config_paths).
+    """
+    keep = config.with_name(config.name + ".pre-monique")
+    if keep.exists():
+        return
+    keep.write_bytes(config.read_bytes())
+
+
 def ensure_umbriel_include() -> bool:
     """Make config.toml include the monitors file Monique generates.
 
@@ -617,6 +635,8 @@ def ensure_umbriel_include() -> bool:
             return False
         edited = text  # copia pacchettizzata che include già il file
 
+    if config.exists() and _is_first_run(text):
+        _keep_original(config, text)
     backup_file(config)
     write_text(config, edited)
     return True

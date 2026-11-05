@@ -33,7 +33,7 @@ COMPOSITORS = [HYPRLAND, SWAY, NIRI, UMBRIEL]
 
 # config.kdl and config.toml are the user's own Niri and Umbriel configs,
 # patched once with an include. Monique does not generate them.
-NOT_GENERATED = {"config.kdl", "config.toml"}
+NOT_GENERATED = {"config.kdl", "config.toml", "config.toml.pre-monique"}
 
 
 def _set_installed(monkeypatch, primary, *, hyprland, sway, niri, umbriel=False):

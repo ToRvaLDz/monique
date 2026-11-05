@@ -25,8 +25,10 @@ from .umbriel_config import (
     ensure_umbriel_include,
     generate_umbriel_config,
     monitor_from_umbriel_output,
+    restore_config_settings,
     umbriel_ids,
     umbriel_preferred,
+    umbriel_user_config_path,
     write_umbriel_config,
 )
 from .utils import (
@@ -200,6 +202,13 @@ class UmbrielIPC:
             return False
         outputs = self.get_outputs()
         monitors = [monitor_from_umbriel_output(o) for o in outputs]
+        # hdr, bit_depth, focus_at_startup e vrr non passano dall'IPC: prima che
+        # l'include tolga le chiavi da config.toml, il seed prende i valori dell'utente
+        try:
+            restore_config_settings(
+                monitors, umbriel_user_config_path().read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError):
+            pass  # niente config.toml leggibile: restano i valori vivi
         ids = umbriel_ids(outputs) if use_description else None
         seed = Profile(name="seed", monitors=monitors)
         write_text(path, generate_umbriel_config(seed, use_description, ids))

@@ -358,8 +358,11 @@ files = ["monitors.toml"]
   include yourself.
 - **First run:** the including file wins over included ones, so the `[output.*]` keys Monique
   manages (`enabled`, `mode`, `position`, `scale`, `transform`, `vrr`, `hdr`, `bit_depth`,
-  `focus_at_startup`) are removed from your `config.toml`; anything else (`workspaces`, `tearing`,
-  `screen_effect`, ...) stays. Later runs never touch your output tables.
+  `focus_at_startup`) are moved out of your `config.toml` into `monitors.toml` (the first apply
+  seeds it with your values for `hdr`, `bit_depth`, `focus_at_startup` and `vrr`, which the IPC
+  cannot report). Your original file is kept once as `config.toml.pre-monique`, never overwritten
+  or deleted by Monique, unlike the `.bak` copy that each apply refreshes. Anything else
+  (`workspaces`, `tearing`, `screen_effect`, ...) stays. Later runs never touch your output tables.
 - **Edits are verified:** the edited file is parsed and compared with what it must contain. If the
   layout cannot be edited safely (dotted `output.X.key` keys, an inline `include = {...}` table or a
   multi-line `files` list), nothing is written and the apply fails with a message; the GUI restores
