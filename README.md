@@ -67,7 +67,7 @@
 
 ## Features
 
-- **Drag-and-drop layout** — arrange monitors visually on an interactive canvas
+- **Drag-and-drop layout** — arrange monitors visually on an interactive canvas; changing a monitor's scale, rotation or resolution moves the monitors touching its right or bottom edge so they stay in contact
 - **Multi-backend** - auto-detects Hyprland, Sway, Niri, or Umbriel from the environment
 - **Cross-write** - save a profile in any compositor and automatically generate config files for the others (e.g. configure in Hyprland → get Sway, Niri and Umbriel configs for free)
 - **Profile system** — save, load, and switch between monitor configurations

@@ -8,6 +8,7 @@ gi.require_version("Adw", "1")
 from gi.repository import Gtk, Gdk, Adw, GLib, Gio
 
 from .canvas import MonitorCanvas
+from .layout import follow_resize
 from .properties_panel import PropertiesPanel
 from .workspace_panel import WorkspacePanel
 from .profile_manager import ProfileManager
@@ -808,6 +809,7 @@ class MainWindow(Adw.ApplicationWindow):
         try:
             self._monitors = self._ipc.get_monitors()
             self._place_disabled(self._monitors)
+            self._snapshot_sizes()
             self._restore_icc_profiles(self._monitors)
             self._restore_default_monitor(self._monitors)
             self._workspace_rules = self._load_workspace_rules_from_conf()
@@ -915,6 +917,7 @@ class MainWindow(Adw.ApplicationWindow):
         """Load a profile into the UI."""
         self._monitors = profile.monitors
         self._place_disabled(self._monitors)
+        self._snapshot_sizes()
         self._workspace_rules = profile.workspace_rules
         self._current_profile_name = profile.name
         self._base_profile_name = profile.name
@@ -1199,8 +1202,29 @@ class MainWindow(Adw.ApplicationWindow):
         self._mark_dirty()
         self._update_properties_for_selected()
 
+    def _snapshot_sizes(self) -> None:
+        """Memorizza la taglia logica di ogni monitor (per follow_resize)."""
+        self._last_sizes = [
+            (m.logical_width, m.logical_height) for m in self._monitors
+        ]
+
+    def _follow_selected_resize(self) -> None:
+        """Sposta i vicini se il monitor selezionato ha cambiato taglia."""
+        idx = self._canvas.selected_index
+        sizes = getattr(self, "_last_sizes", [])
+        if not (0 <= idx < len(self._monitors)) or len(sizes) != len(self._monitors):
+            self._snapshot_sizes()
+            return
+        m = self._monitors[idx]
+        old_w, old_h = sizes[idx]
+        if m.enabled and (m.logical_width, m.logical_height) != (old_w, old_h):
+            # Il monitor selezionato non si muove mai: il pannello resta valido
+            follow_resize(self._monitors, idx, old_w, old_h)
+        self._snapshot_sizes()
+
     def _on_property_changed(self, panel: PropertiesPanel) -> None:
         self._enforce_single_default_monitor()
+        self._follow_selected_resize()
         self._mark_dirty()
         self._canvas.queue_draw()
 
