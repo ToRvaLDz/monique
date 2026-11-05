@@ -417,3 +417,89 @@ def test_garbage_and_blank_lines_are_skipped(sockdir):
 def test_err_reply_to_subscribe_raises(sockdir):
     with pytest.raises(RuntimeError, match="nope"):
         asyncio.run(_collect(sockdir, [b'{"err":"nope"}\n']))
+
+
+# ── prepare_apply ────────────────────────────────────────────────────────
+
+def test_prepare_apply_seeds_monitors_from_the_live_state(applying):
+    ipc, state, cfg = applying
+    state["outputs"][1].update(transform="270", scale=1.5, enabled=False)
+    state["outputs"][0].update(transform="90", position={"x": 40, "y": 7})
+
+    assert ipc.prepare_apply() is True
+
+    tables = tomllib.loads((cfg / "monitors.toml").read_text())["output"]
+    first = tables["HEADLESS-1"]
+    assert first["transform"] == "90"
+    assert first["position"] == [40, 7]
+    assert first["mode"].count("x") == 1
+    assert {"vrr", "hdr", "bit_depth", "focus_at_startup", "scale"} <= set(first)
+    assert tables["V2"] == {"enabled": False}
+
+
+def test_prepare_apply_ensures_the_include(applying):
+    ipc, _, cfg = applying
+
+    ipc.prepare_apply()
+
+    config = tomllib.loads((cfg / "config.toml").read_text())
+    assert config["include"]["optional"]["files"] == ["monitors.toml"]
+
+
+def test_prepare_apply_is_a_no_op_when_monitors_exist(applying):
+    ipc, _, cfg = applying
+    (cfg / "monitors.toml").write_text("# mine\n")
+    before = (cfg / "config.toml").read_text()
+
+    assert ipc.prepare_apply() is False
+
+    assert (cfg / "monitors.toml").read_text() == "# mine\n"
+    assert (cfg / "config.toml").read_text() == before
+
+
+def test_prepare_apply_uses_the_live_config_name(applying):
+    ipc, state, cfg = applying
+    state["outputs"][1].update(make="AOC", model="2757", serial="1",
+                               config_name="PNP(AOC) 2757 1")
+
+    ipc.prepare_apply(use_description=True)
+
+    tables = tomllib.loads((cfg / "monitors.toml").read_text())["output"]
+    assert "PNP(AOC) 2757 1" in tables
+
+
+def test_prepare_apply_fails_cleanly_on_an_unusable_config(applying):
+    from monique.umbriel_config import UmbrielConfigError
+
+    ipc, _, cfg = applying
+    (cfg / "config.toml").write_text("[include\nbroken")
+
+    with pytest.raises(UmbrielConfigError):
+        ipc.prepare_apply()
+
+    assert not (cfg / "monitors.toml").exists()
+    assert (cfg / "config.toml").read_text() == "[include\nbroken"
+
+
+def test_prepare_apply_propagates_an_ipc_failure_without_writing(applying):
+    ipc, state, cfg = applying
+    state["outputs"] = None
+
+    with pytest.raises(OSError):
+        ipc.prepare_apply()
+
+    assert not (cfg / "monitors.toml").exists()
+
+
+def test_prepare_apply_seed_round_trips_through_restore(applying):
+    from monique.umbriel_config import restore_config_settings
+
+    ipc, state, cfg = applying
+    state["outputs"][0].update(transform="flipped-270", adaptive_sync=True)
+    ipc.prepare_apply()
+
+    fresh = ipc.get_monitors()
+    restore_config_settings(fresh, (cfg / "monitors.toml").read_text())
+
+    assert fresh[0].transform.name == "FLIPPED_270"
+    assert fresh[0].vrr.name == "ON"

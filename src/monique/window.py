@@ -1260,8 +1260,19 @@ class MainWindow(Adw.ApplicationWindow):
             workspace_rules=list(self._workspace_rules),
         )
 
-        # The IPC client knows which files it writes, cross-writes included
         hypr_fmt = normalize_hypr_format(self._app_settings.get("hypr_config_format"))
+
+        # Umbriel keeps the live transform and mode when monitors.toml goes
+        # away: seed it from the live state so a revert has something to restore
+        if isinstance(self._ipc, UmbrielIPC):
+            try:
+                self._ipc.prepare_apply(
+                    use_description=not self._app_settings.get("use_port_names", False))
+            except (OSError, RuntimeError) as e:
+                self._toast(f"Apply failed: {e}")
+                return
+
+        # The IPC client knows which files it writes, cross-writes included
         config_paths = self._ipc.config_paths(hypr_config_format=hypr_fmt)
 
         # Snapshot workspaces (for revert)

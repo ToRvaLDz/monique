@@ -365,6 +365,16 @@ files = ["monitors.toml"]
   multi-line `files` list), nothing is written and the apply fails with a message; the GUI restores
   its backups. Add the include of your monitors file by hand in that case.
 - Outputs are matched by `"<make> <model> <serial>"` (or by connector with **Use port names**).
+- **Explicit keys:** Umbriel resets `scale`, `enabled` and `position` when a key disappears but keeps
+  the live `transform` and `mode`. Monique therefore writes `transform` (also `"normal"`), `vrr`,
+  `hdr`, `bit_depth` and `focus_at_startup` for every enabled output. A resolution set to preferred
+  is written as the output's preferred mode, read from the live outputs; without live data (a
+  cross-write from another compositor, a disconnected output, or no preferred mode reported) `mode`
+  is omitted and Umbriel keeps whatever mode is active.
+- **First apply and revert:** with no `monitors.toml` yet, the GUI first writes one describing the
+  current live layout (every key explicit) and makes sure the include is in `config.toml`. If that
+  first apply is reverted, `config.toml` and `monitors.toml` stay and describe the previous layout.
+  The daemon has no revert and does not do this.
 - **Limits:** no mirroring, no workspace rules, no ICC profiles, no SDR brightness/saturation or HDR
   EDID overrides, and VRR/HDR are only restored in the GUI from `monitors.toml`, because the IPC
   reports live state only.

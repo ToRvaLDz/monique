@@ -15,12 +15,15 @@ from .config_paths import (
     compositor_config_paths,
     niri_monitors_path,
     sway_monitors_path,
+    umbriel_monitors_path,
 )
 from .hypr_config import write_hyprland_configs
 from .kanshi_config import write_kanshi_config
 from .models import MonitorConfig, Profile
 from .umbriel_config import (
+    UmbrielConfigError,
     ensure_umbriel_include,
+    generate_umbriel_config,
     monitor_from_umbriel_output,
     umbriel_ids,
     umbriel_preferred,
@@ -179,6 +182,33 @@ class UmbrielIPC:
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
             log.warning("Cannot read Umbriel outputs for identities: %s", e)
             return None, None
+
+    def prepare_apply(self, *, use_description: bool = False) -> bool:
+        """Describe the live layout in monitors.toml before the first apply.
+
+        Senza monitors.toml il revert della GUI lo cancellerebbe e Umbriel
+        conserverebbe transform e mode appena applicati; con il file scritto
+        dallo stato vivo (ogni chiave esplicita) il revert ripristina il layout
+        precedente.  Garantisce anche l'include.  Non fa nulla se il file esiste.
+
+        Returns True if monitors.toml was written.  Errori: OSError,
+        RuntimeError (IPC) o UmbrielConfigError (include impossibile; il file
+        appena scritto viene tolto).
+        """
+        path = umbriel_monitors_path()
+        if path.exists():
+            return False
+        outputs = self.get_outputs()
+        monitors = [monitor_from_umbriel_output(o) for o in outputs]
+        ids = umbriel_ids(outputs) if use_description else None
+        seed = Profile(name="seed", monitors=monitors)
+        write_text(path, generate_umbriel_config(seed, use_description, ids))
+        try:
+            ensure_umbriel_include()
+        except (OSError, UmbrielConfigError):
+            path.unlink(missing_ok=True)
+            raise
+        return True
 
     def apply_profile(
         self, profile: Profile, *, update_sddm: bool = True,
