@@ -261,6 +261,16 @@ def test_array_tables_are_sections_of_their_own(cfg):
     assert data["include"]["optional"]["files"] == ["monitors.toml"]
 
 
+def test_undecodable_config_is_a_config_error(cfg):
+    cfg.mkdir(parents=True, exist_ok=True)
+    path = cfg / "config.toml"
+    path.write_bytes(b"[general]\nx = '\xff\xfe'\n")
+
+    with pytest.raises(UmbrielConfigError, match="UTF-8"):
+        ensure_umbriel_include()
+    assert path.read_bytes().startswith(b"[general]")
+
+
 # ── unverifiable layouts ─────────────────────────────────────────────────
 
 @pytest.mark.parametrize("text", [

@@ -144,8 +144,12 @@ class UmbrielIPC:
         finally:
             sock.close()
 
-        line = buf.split(b"\n", 1)[0].decode(errors="replace")
-        return _reply_value(json.loads(line))
+        raw = buf.split(b"\n", 1)[0]
+        try:
+            reply = json.loads(raw.decode())
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise RuntimeError(f"Umbriel sent an invalid reply: {e}") from e
+        return _reply_value(reply)
 
     def get_outputs(self) -> list[dict]:
         """Query every connected output, disabled ones included."""

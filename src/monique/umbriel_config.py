@@ -507,13 +507,20 @@ def _edit_config(text: str, data: dict, rel_name: str) -> str | None:
     return result
 
 
+def _read_utf8(path: Path) -> str:
+    try:
+        return path.read_text(encoding="utf-8")
+    except UnicodeDecodeError as e:
+        raise UmbrielConfigError(f"{path} is not valid UTF-8: {e}") from e
+
+
 def _initial_text(config: Path) -> str | None:
     """Return config.toml's text, copying the packaged one when it is missing.
 
     None: custom config dir without a config.toml, which the user wires by hand.
     """
     if config.exists():
-        return config.read_text(encoding="utf-8")
+        return _read_utf8(config)
     if is_config_dir_overridden():
         return None
     packaged = find_packaged_config()
@@ -522,7 +529,7 @@ def _initial_text(config: Path) -> str | None:
         raise UmbrielConfigError(
             f"{config} does not exist and no packaged Umbriel config.toml was "
             "found to start from; create it and include the monitors file")
-    return packaged.read_text(encoding="utf-8")
+    return _read_utf8(packaged)
 
 
 def ensure_umbriel_include() -> bool:

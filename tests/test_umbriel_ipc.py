@@ -114,6 +114,13 @@ def test_err_reply_raises_runtime_error(serve):
         ipc._request({"cmd": "bogus"})
 
 
+def test_invalid_json_reply_raises_runtime_error(serve):
+    ipc = serve(b"\xff not json\n")
+
+    with pytest.raises(RuntimeError, match="invalid reply"):
+        ipc._request({"cmd": "x"})
+
+
 def test_closed_without_reply_raises(sockdir):
     path = sockdir / "c.sock"
     server = socket.socket(socket.AF_UNIX)
