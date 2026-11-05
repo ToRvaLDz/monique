@@ -24,6 +24,7 @@ from monique.umbriel_config import (
     read_output_settings,
     restore_config_settings,
     umbriel_ids,
+    umbriel_preferred,
     write_umbriel_config,
 )
 
@@ -154,10 +155,15 @@ def test_enabled_output_renders_every_managed_key():
     }}
 
 
-def test_defaults_are_left_out():
+def test_defaults_are_written_explicitly():
+    # Umbriel conserva transform e mode vivi quando la chiave sparisce
     table = _tables(_gen(_mon()))["DP-1"]
 
-    assert set(table) == {"enabled", "mode", "position", "scale"}
+    assert table == {
+        "enabled": True, "mode": "2560x1440@144.000", "position": [0, 0],
+        "scale": 1.0, "transform": "normal", "vrr": "disabled", "hdr": "off",
+        "bit_depth": 8, "focus_at_startup": False,
+    }
 
 
 def test_disabled_output_renders_only_enabled_false():
@@ -172,18 +178,85 @@ def test_vrr_policies(vrr, policy):
 
 
 @pytest.mark.parametrize("cm,hdr", [("hdr", "on"), ("hdredid", "on"),
-                                    ("srgb", None), ("", None)])
+                                    ("srgb", "off"), ("", "off")])
 def test_only_hdr_color_modes_map_to_hdr(cm, hdr):
     assert _tables(_gen(_mon(color_management=cm)))["DP-1"].get("hdr") == hdr
 
 
-def test_non_explicit_modes_are_omitted():
-    table = _tables(_gen(_mon(
-        resolution_mode=ResolutionMode.PREFERRED,
-        position_mode=PositionMode.AUTO, scale_mode=ScaleMode.AUTO,
-    )))["DP-1"]
+def _non_explicit(**kw) -> MonitorConfig:
+    return _mon(resolution_mode=ResolutionMode.PREFERRED,
+                position_mode=PositionMode.AUTO, scale_mode=ScaleMode.AUTO, **kw)
 
-    assert table == {"enabled": True}
+
+def test_non_explicit_modes_are_omitted_without_live_data():
+    table = _tables(_gen(_non_explicit()))["DP-1"]
+
+    assert set(table) == {"enabled", "transform", "vrr", "hdr", "bit_depth",
+                          "focus_at_startup"}
+
+
+@pytest.mark.parametrize("transform,raw", [
+    (Transform.NORMAL, "normal"), (Transform.ROTATE_270, "270"),
+    (Transform.FLIPPED_90, "flipped-90")])
+def test_transform_is_always_explicit(transform, raw):
+    assert _tables(_gen(_mon(transform=transform)))["DP-1"]["transform"] == raw
+
+
+def _preferred_output(**changes) -> dict:
+    out = _identified(name="DP-1", modes=[
+        {"width": 1920, "height": 1080, "refresh_mhz": 60000,
+         "current": True, "preferred": False},
+        {"width": 2560, "height": 1440, "refresh_mhz": 59951,
+         "current": False, "preferred": True},
+    ])
+    out.update(changes)
+    return out
+
+
+def test_umbriel_preferred_reads_the_preferred_mode():
+    found = umbriel_preferred([_preferred_output()])
+
+    assert found == {"DP-1": "2560x1440@59.951", "AOC 2757 1234": "2560x1440@59.951"}
+
+
+def test_umbriel_preferred_skips_outputs_without_a_preferred_mode():
+    assert umbriel_preferred([_outputs()[1]]) == {}
+
+
+def test_umbriel_preferred_drops_ambiguous_twin_descriptions():
+    twin = _preferred_output(name="DP-2")
+
+    found = umbriel_preferred([_preferred_output(), twin])
+
+    assert found == {"DP-1": "2560x1440@59.951", "DP-2": "2560x1440@59.951"}
+
+
+def test_non_explicit_resolution_gets_the_live_preferred_mode():
+    preferred = umbriel_preferred([_preferred_output()])
+
+    by_desc = _tables(generate_umbriel_config(
+        Profile(name="p", monitors=[_non_explicit()]), True, None, preferred))
+    by_port = _tables(generate_umbriel_config(
+        Profile(name="p", monitors=[_non_explicit()]), False, None, preferred))
+
+    assert by_desc["PNP(AOC) 2757 1234"]["mode"] == "2560x1440@59.951"
+    assert by_port["DP-1"]["mode"] == "2560x1440@59.951"
+
+
+def test_explicit_resolution_wins_over_the_preferred_mode():
+    text = generate_umbriel_config(
+        Profile(name="p", monitors=[_mon()]), False, None,
+        {"DP-1": "1920x1080@60.000"})
+
+    assert _tables(text)["DP-1"]["mode"] == "2560x1440@144.000"
+
+
+def test_preferred_mode_of_a_disconnected_output_is_omitted():
+    text = generate_umbriel_config(
+        Profile(name="p", monitors=[_non_explicit()]), False, None,
+        {"HDMI-A-1": "1920x1080@60.000"})
+
+    assert "mode" not in _tables(text)["DP-1"]
 
 
 @pytest.mark.parametrize("scale,expected", [(8.0, 4.0), (0.1, 0.25)])
@@ -312,6 +385,24 @@ def test_generated_file_validates_with_real_umbriel(tmp_path):
     assert done.returncode == 0
 
 
+@pytest.mark.skipif(shutil.which("umbriel") is None,
+                    reason="umbriel is not on PATH")
+def test_all_explicit_keys_validate_with_real_umbriel(tmp_path):
+    text = _gen(_mon(), _mon(name="DP-2", description="", make="", model="",
+                             serial=""), use_description=False)
+    assert 'transform = "normal"' in text and 'vrr = "disabled"' in text
+    path = tmp_path / "monitors.toml"
+    path.write_text(text, encoding="utf-8")
+
+    done = subprocess.run(
+        ["umbriel", "config", "validate", "--json", "-c", str(path)],
+        capture_output=True, text=True, timeout=30,
+    )
+
+    report = json.loads(done.stdout)
+    assert report["valid"] is True, report["diagnostics"]
+
+
 # ── impostazioni che l'IPC non riporta ───────────────────────────────────
 
 def _restored(monitors) -> list[MonitorConfig]:
@@ -365,3 +456,14 @@ def test_restore_ignores_an_unreadable_file():
     restore_config_settings([live], "[output\nbroken")
 
     assert live.focus_at_startup is False
+
+
+def test_restore_round_trips_the_explicit_defaults():
+    saved = _mon(vrr=VRR.ON, bitdepth=8, color_management="")
+
+    fresh = _restored([saved])[0]
+
+    assert fresh.vrr == VRR.ON
+    assert fresh.bitdepth == 8
+    assert fresh.color_management == ""
+    assert fresh.focus_at_startup is False

@@ -235,6 +235,22 @@ def test_apply_uses_the_live_config_name(applying):
         "PNP(AOC) 2757 1"]
 
 
+def test_apply_writes_the_live_preferred_mode(applying):
+    from monique.models import ResolutionMode
+
+    ipc, state, cfg = applying
+    state["outputs"][1]["modes"].append(
+        {"width": 1024, "height": 768, "refresh_mhz": 60000,
+         "current": False, "preferred": True})
+    mon = MonitorConfig(name="V2", resolution_mode=ResolutionMode.PREFERRED)
+
+    ipc.apply_profile(_profile(mon), use_description=False)
+
+    table = tomllib.loads((cfg / "monitors.toml").read_text())["output"]["V2"]
+    assert table["mode"] == "1024x768@60.000"
+    assert table["transform"] == "normal"
+
+
 def test_apply_survives_an_ipc_failure(applying):
     ipc, state, cfg = applying
     state["outputs"] = None

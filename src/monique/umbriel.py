@@ -23,6 +23,7 @@ from .umbriel_config import (
     ensure_umbriel_include,
     monitor_from_umbriel_output,
     umbriel_ids,
+    umbriel_preferred,
     write_umbriel_config,
 )
 from .utils import (
@@ -170,13 +171,14 @@ class UmbrielIPC:
         """Return the config files apply_profile() writes (for backup/revert)."""
         return compositor_config_paths(UMBRIEL, hypr_config_format=hypr_config_format)
 
-    def _read_ids(self) -> dict[str, str] | None:
-        """Map description -> ``config_name`` of the live outputs, None on failure."""
+    def _read_live(self) -> tuple[dict[str, str] | None, dict[str, str] | None]:
+        """Return (ids, preferred modes) of the live outputs, Nones on failure."""
         try:
-            return umbriel_ids(self.get_outputs())
+            outputs = self.get_outputs()
+            return umbriel_ids(outputs), umbriel_preferred(outputs)
         except (OSError, RuntimeError, ValueError, AttributeError) as e:
             log.warning("Cannot read Umbriel outputs for identities: %s", e)
-            return None
+            return None, None
 
     def apply_profile(
         self, profile: Profile, *, update_sddm: bool = True,
@@ -184,8 +186,9 @@ class UmbrielIPC:
         hypr_config_format: str | None = None,
     ) -> None:
         """Write the Umbriel monitor config (live reload) and cross-write others."""
-        ids = self._read_ids() if use_description else None
-        write_umbriel_config(profile, use_description, ids)
+        ids, preferred = self._read_live()
+        write_umbriel_config(
+            profile, use_description, ids if use_description else None, preferred)
         self._cross_write(
             profile, update_sddm=update_sddm, update_greetd=update_greetd,
             use_description=use_description, hypr_config_format=hypr_config_format,

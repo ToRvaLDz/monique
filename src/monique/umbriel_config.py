@@ -79,6 +79,41 @@ def umbriel_ids(outputs: list[dict]) -> dict[str, str]:
     }
 
 
+def _mode_text(mode: dict) -> str | None:
+    """Render an Umbriel mode entry as the ``WxH@R`` string of ``mode``."""
+    width, height = mode.get("width"), mode.get("height")
+    if not (width and height):
+        return None
+    size = f"{width}x{height}"
+    refresh = mode.get("refresh_mhz") or 0
+    return f"{size}@{refresh / 1000.0:.3f}" if refresh > 0 else size
+
+
+def umbriel_preferred(outputs: list[dict]) -> dict[str, str]:
+    """Map description and connector -> preferred mode of the live outputs.
+
+    Umbriel conserva il ``mode`` vivo quando la chiave sparisce dal file: per
+    ottenere il modo preferito va scritto esplicitamente.  Una descrizione
+    condivisa da più output (gemelli) è ambigua e resta fuori: vale il connettore.
+    """
+    found: dict[str, str] = {}
+    seen: set[str] = set()
+    for out in outputs:
+        mode = next((m for m in out.get("modes") or [] if m.get("preferred")), None)
+        text = _mode_text(mode) if mode else None
+        if not text:
+            continue
+        if out.get("name"):
+            found[out["name"]] = text
+        desc = _identity(out)
+        if desc and desc not in seen:
+            found[desc] = text
+        elif desc:
+            found.pop(desc, None)
+        seen.add(desc)
+    return found
+
+
 def monitor_from_umbriel_output(data: dict) -> MonitorConfig:
     """Create a MonitorConfig from one entry of Umbriel's ``outputs`` reply."""
     modes = data.get("modes") or []
@@ -162,7 +197,26 @@ def _mode(monitor: MonitorConfig) -> str:
     return f"{size}@{monitor.refresh_rate:.3f}"
 
 
-def _output_lines(monitor: MonitorConfig, selector: str) -> list[str]:
+def _preferred_mode(
+    monitor: MonitorConfig, use_description: bool, preferred: dict[str, str] | None,
+) -> str | None:
+    """Return the live preferred mode of *monitor*, None without live data."""
+    if not preferred:
+        return None
+    if use_description and monitor.description in preferred:
+        return preferred[monitor.description]
+    return preferred.get(monitor.name)
+
+
+def _output_lines(
+    monitor: MonitorConfig, selector: str, preferred_mode: str | None = None,
+) -> list[str]:
+    """Render one table; every key Umbriel would keep live is written explicitly.
+
+    Umbriel azzera scale, enabled e position quando la chiave sparisce, ma
+    conserva transform e mode: quelli vanno scritti sempre, anche ai valori
+    di default.  Senza dati vivi il modo non preferito resta omesso.
+    """
     lines = [f"[output.{_quote(selector)}]"]
     if not monitor.enabled:
         return [*lines, "enabled = false"]
@@ -170,31 +224,33 @@ def _output_lines(monitor: MonitorConfig, selector: str) -> list[str]:
     lines.append("enabled = true")
     if monitor.resolution_mode == ResolutionMode.EXPLICIT:
         lines.append(f'mode = "{_mode(monitor)}"')
+    elif preferred_mode:
+        lines.append(f'mode = "{preferred_mode}"')
     if monitor.position_mode == PositionMode.EXPLICIT:
         lines.append(f"position = [{monitor.x}, {monitor.y}]")
     if monitor.scale_mode == ScaleMode.EXPLICIT:
         lines.append(f"scale = {_scale(monitor.scale)}")
-    if monitor.transform != Transform.NORMAL:
-        lines.append(f'transform = "{_TRANSFORMS[monitor.transform.value]}"')
-    if monitor.vrr in _VRR_POLICY:
-        lines.append(f'vrr = "{_VRR_POLICY[monitor.vrr]}"')
-    if monitor.color_management in ("hdr", "hdredid"):
-        lines.append('hdr = "on"')
-    if monitor.bitdepth == 10:
-        lines.append("bit_depth = 10")
-    if monitor.focus_at_startup:
-        lines.append("focus_at_startup = true")
+    hdr = "on" if monitor.color_management in ("hdr", "hdredid") else "off"
+    lines += [
+        f'transform = "{_TRANSFORMS[monitor.transform.value]}"',
+        f'vrr = "{_VRR_POLICY.get(monitor.vrr, "disabled")}"',
+        f'hdr = "{hdr}"',
+        f"bit_depth = {10 if monitor.bitdepth == 10 else 8}",
+        f"focus_at_startup = {'true' if monitor.focus_at_startup else 'false'}",
+    ]
     return lines
 
 
 def generate_umbriel_config(
     profile: Profile, use_description: bool,
     ids: dict[str, str] | None = None,
+    preferred: dict[str, str] | None = None,
 ) -> str:
     """Serialize *profile* as the TOML monitors file included by Umbriel.
 
     *ids* mappa la descrizione normalizzata nel ``config_name`` dei monitor
-    collegati (vedi ``umbriel_ids``).
+    collegati (vedi ``umbriel_ids``); *preferred* il loro modo preferito (vedi
+    ``umbriel_preferred``).
     """
     selectors = _selectors(profile.monitors, use_description, ids)
     blocks: list[str] = []
@@ -204,18 +260,21 @@ def generate_umbriel_config(
             # Ancora duplicato dopo il fallback: meglio omettere che rompere il file
             continue
         seen.add(selector.lower())
-        blocks.append("\n".join(_output_lines(monitor, selector)))
+        pref = _preferred_mode(monitor, use_description, preferred)
+        blocks.append("\n".join(_output_lines(monitor, selector, pref)))
     return HEADER + "\n\n" + "\n\n".join(blocks) + "\n"
 
 
 def write_umbriel_config(
     profile: Profile, use_description: bool,
     ids: dict[str, str] | None = None,
+    preferred: dict[str, str] | None = None,
 ) -> None:
     """Write the Umbriel monitors file (backing up the previous one)."""
     path = umbriel_monitors_path()
     backup_file(path)
-    write_text(path, generate_umbriel_config(profile, use_description, ids))
+    write_text(
+        path, generate_umbriel_config(profile, use_description, ids, preferred))
 
 
 def read_output_settings(text: str) -> dict[str, dict]:
