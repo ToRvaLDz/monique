@@ -46,6 +46,11 @@ def umbriel_monitors_path() -> Path:
     return umbriel_config_dir() / f"{get_monitor_config_name()}.toml"
 
 
+def umbriel_user_config_path() -> Path:
+    """Return the user's Umbriel ``config.toml`` (the one that includes ours)."""
+    return umbriel_config_dir() / "config.toml"
+
+
 def compositor_config_paths(
     primary: str, *, hypr_config_format: str | None = None,
 ) -> list[Path]:
@@ -61,7 +66,7 @@ def compositor_config_paths(
     compositor share one directory, where Hyprland and Sway both want
     ``monitors.conf``.
     """
-    if primary not in (HYPRLAND, SWAY, NIRI):
+    if primary not in (HYPRLAND, SWAY, NIRI, UMBRIEL):
         raise ValueError(f"Unknown compositor: {primary!r}")
 
     paths: list[Path] = []
@@ -70,6 +75,10 @@ def compositor_config_paths(
         paths.extend(hyprland_config_paths(hypr_config_format))
     elif primary == SWAY:
         paths.append(sway_monitors_path())
+    elif primary == UMBRIEL:
+        # Anche config.toml: l'include (e la rimozione dei campi gestiti al
+        # primo avvio) va annullato dal revert; Niri lascia fuori config.kdl
+        paths.extend([umbriel_monitors_path(), umbriel_user_config_path()])
     else:
         paths.append(niri_monitors_path())
 

@@ -81,6 +81,11 @@ def _config_dir_override() -> Path | None:
     return None
 
 
+def is_config_dir_overridden() -> bool:
+    """Return True when ``--config-dir`` or settings.json redirect the monitor files."""
+    return _config_dir_override() is not None
+
+
 def sway_config_dir() -> Path:
     """Return the Sway config directory."""
     override = _config_dir_override()
