@@ -13,11 +13,13 @@ from .workspace_panel import WorkspacePanel
 from .profile_manager import ProfileManager
 from .models import MonitorConfig, Profile, WorkspaceRule, monitor_matches_identifier
 from .hypr_config import hyprland_config_paths, read_default_monitor, read_icc_profiles
+from .config_paths import umbriel_monitors_path
 from .kanshi_config import kanshi_monitors_path
 from .hyprland import HyprlandIPC
 from .niri import NiriIPC, read_focus_at_startup
 from .sway import SwayIPC
 from .umbriel import UmbrielIPC, env_umbriel_socket, find_umbriel_socket
+from .umbriel_config import restore_config_settings
 from .utils import (
     HYPR_FORMAT_BOTH,
     HYPR_FORMAT_LEGACY,
@@ -95,6 +97,9 @@ def _detect_ipc() -> HyprlandIPC | NiriIPC | SwayIPC | UmbrielIPC:
     # Default fallback
     return HyprlandIPC()
 
+
+# Compositori senza workspace rules né migrazione: workspace per monitor, nativi
+NO_WORKSPACE_RULES = (NiriIPC, UmbrielIPC)
 
 CONFIRM_TIMEOUT = 10  # seconds
 OSD_TIMEOUT_MS = 1500
@@ -249,8 +254,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._btn_apply.connect("clicked", self._on_apply_clicked)
         header.pack_end(self._btn_apply)
 
-        # Workspace button (not applicable for Niri — dynamic per-monitor workspaces)
-        if not isinstance(self._ipc, NiriIPC):
+        # Workspace button (not applicable for Niri and Umbriel: per-monitor workspaces)
+        if not isinstance(self._ipc, NO_WORKSPACE_RULES):
             btn_ws = Gtk.Button(icon_name="view-grid-symbolic", tooltip_text="Workspace rules")
             btn_ws.connect("clicked", self._on_workspaces_clicked)
             header.pack_end(btn_ws)
@@ -285,6 +290,8 @@ class MainWindow(Adw.ApplicationWindow):
         self._props = PropertiesPanel()
         if isinstance(self._ipc, NiriIPC):
             self._props.set_compositor("niri")
+        elif isinstance(self._ipc, UmbrielIPC):
+            self._props.set_compositor("umbriel")
         elif isinstance(self._ipc, SwayIPC):
             self._props.set_compositor("sway")
         else:
@@ -529,8 +536,8 @@ class MainWindow(Adw.ApplicationWindow):
             row_no_dm.add_css_class("dim-label")
             grp_dm.add(row_no_dm)
 
-        # ── Workspaces group (Niri handles migration natively) ──
-        if not isinstance(self._ipc, NiriIPC):
+        # ── Workspaces group (Niri and Umbriel handle migration natively) ──
+        if not isinstance(self._ipc, NO_WORKSPACE_RULES):
             grp_ws = Adw.PreferencesGroup(
                 title="Workspaces",
                 description="Configure workspace behavior on monitor changes",
@@ -641,7 +648,8 @@ class MainWindow(Adw.ApplicationWindow):
         return (
             "Relative to the compositor config directory.\n"
             f"Files: {effective}.kdl (Niri), {effective}.conf (Sway/Hyprland), "
-            f"{effective}.lua (Hyprland Lua), {effective}.kanshi (kanshi)"
+            f"{effective}.lua (Hyprland Lua), {effective}.kanshi (kanshi), "
+            f"{effective}.toml (Umbriel)"
         )
 
     def _on_config_name_changed(self, row: Adw.EntryRow) -> None:
@@ -773,8 +781,8 @@ class MainWindow(Adw.ApplicationWindow):
 
     def _load_workspace_rules_from_conf(self) -> list[WorkspaceRule]:
         """Read workspace rules from the Hyprland monitor config we wrote."""
-        # Niri doesn't support Hyprland-style workspace rules
-        if isinstance(self._ipc, NiriIPC):
+        # Niri and Umbriel don't support Hyprland-style workspace rules
+        if isinstance(self._ipc, NO_WORKSPACE_RULES):
             return []
 
         # The legacy config is only written for the "legacy"/"both" formats,
@@ -842,7 +850,10 @@ class MainWindow(Adw.ApplicationWindow):
             m.icc_profile = by_desc or profiles.get(m.name, "")
 
     def _restore_default_monitor(self, monitors: list[MonitorConfig]) -> None:
-        """Refill the startup-focus flag, which neither compositor reports over IPC."""
+        """Refill the startup-focus flag, which no compositor reports over IPC."""
+        if isinstance(self._ipc, UmbrielIPC):
+            self._restore_umbriel_settings(monitors)
+            return
         if isinstance(self._ipc, HyprlandIPC):
             identifiers = [read_default_monitor()]
         elif isinstance(self._ipc, NiriIPC):
@@ -854,6 +865,16 @@ class MainWindow(Adw.ApplicationWindow):
             m.focus_at_startup = any(
                 monitor_matches_identifier(m, i) for i in identifiers
             )
+
+    @staticmethod
+    def _restore_umbriel_settings(monitors: list[MonitorConfig]) -> None:
+        """Refill the settings Umbriel's IPC does not report from monitors.toml."""
+        path = umbriel_monitors_path()
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return
+        restore_config_settings(monitors, text)
 
     @staticmethod
     def _place_disabled(monitors: list[MonitorConfig]) -> None:
@@ -1278,8 +1299,8 @@ class MainWindow(Adw.ApplicationWindow):
                     path.unlink()
             return
 
-        # Migrate orphaned workspaces if setting is on (Niri handles this natively)
-        if not isinstance(self._ipc, NiriIPC) and self._app_settings.get("migrate_workspaces", True):
+        # Migrate orphaned workspaces if setting is on (Niri and Umbriel do it natively)
+        if not isinstance(self._ipc, NO_WORKSPACE_RULES) and self._app_settings.get("migrate_workspaces", True):
             self._migrate_orphaned_workspaces(profile)
 
         # Show confirmation dialog with countdown

@@ -233,6 +233,34 @@ def read_output_settings(text: str) -> dict[str, dict]:
     return {k.lower(): v for k, v in tables.items() if isinstance(v, dict)}
 
 
+def _settings_for(monitor: MonitorConfig, tables: dict[str, dict]) -> dict:
+    """Return the output table of *monitor*: identity first, then connector."""
+    identity = monitor.niri_native_description() if monitor.description else None
+    for selector in (identity, monitor.name):
+        if selector and selector.lower() in tables:
+            return tables[selector.lower()]
+    return {}
+
+
+def restore_config_settings(monitors: list[MonitorConfig], text: str) -> None:
+    """Refill from monitors.toml what Umbriel's IPC does not report.
+
+    L'IPC dà solo lo stato vivo: senza questo un apply dalla GUI perderebbe
+    focus_at_startup, la policy VRR, l'HDR e la profondità colore.  Un campo
+    assente dal file resta com'è (lo stato vivo vale più di un default).
+    """
+    tables = read_output_settings(text)
+    for monitor in monitors:
+        table = _settings_for(monitor, tables)
+        monitor.focus_at_startup = table.get("focus_at_startup") is True
+        if "vrr" in table:
+            monitor.vrr = _VRR_FROM_POLICY.get(table["vrr"], VRR.OFF)
+        if "hdr" in table:
+            monitor.color_management = "hdr" if table["hdr"] == "on" else ""
+        if table.get("bit_depth") in (8, 10):
+            monitor.bitdepth = table["bit_depth"]
+
+
 # ── include in config.toml ───────────────────────────────────────────────
 
 class UmbrielConfigError(RuntimeError):

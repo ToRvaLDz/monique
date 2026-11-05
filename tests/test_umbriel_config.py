@@ -22,6 +22,7 @@ from monique.umbriel_config import (
     generate_umbriel_config,
     monitor_from_umbriel_output,
     read_output_settings,
+    restore_config_settings,
     umbriel_ids,
     write_umbriel_config,
 )
@@ -309,3 +310,58 @@ def test_generated_file_validates_with_real_umbriel(tmp_path):
     report = json.loads(done.stdout)
     assert report["valid"] is True, report["diagnostics"]
     assert done.returncode == 0
+
+
+# ── impostazioni che l'IPC non riporta ───────────────────────────────────
+
+def _restored(monitors) -> list[MonitorConfig]:
+    """Round-trip: generate the file for *monitors*, then refill fresh copies."""
+    text = _gen(*monitors, use_description=True)
+    fresh = [monitor_from_umbriel_output(_identified(name=m.name)) for m in monitors]
+    restore_config_settings(fresh, text)
+    return fresh
+
+
+def test_restore_refills_what_ipc_does_not_report():
+    saved = _mon(vrr=VRR.FULLSCREEN, bitdepth=10, color_management="hdr",
+                 focus_at_startup=True)
+
+    fresh = _restored([saved])[0]
+
+    assert fresh.vrr == VRR.FULLSCREEN
+    assert fresh.bitdepth == 10
+    assert fresh.color_management == "hdr"
+    assert fresh.focus_at_startup is True
+
+
+def test_restore_matches_by_identity_then_connector():
+    text = (
+        '[output."pnp(aoc) 2757 1234"]\nfocus_at_startup = true\n\n'
+        '[output."DP-2"]\nbit_depth = 10\n'
+    )
+    by_identity = monitor_from_umbriel_output(_identified(name="DP-7"))
+    by_port = monitor_from_umbriel_output(_outputs()[1])
+    by_port.name = "DP-2"
+
+    restore_config_settings([by_identity, by_port], text)
+
+    assert by_identity.focus_at_startup is True
+    assert by_port.bitdepth == 10
+    assert by_port.focus_at_startup is False
+
+
+def test_restore_keeps_live_values_the_file_does_not_mention():
+    live = monitor_from_umbriel_output(_identified(adaptive_sync=True))
+
+    restore_config_settings([live], '[output."PNP(AOC) 2757 1234"]\nscale = 1.0\n')
+
+    assert live.vrr == VRR.ON
+    assert live.bitdepth == 8
+
+
+def test_restore_ignores_an_unreadable_file():
+    live = monitor_from_umbriel_output(_identified())
+
+    restore_config_settings([live], "[output\nbroken")
+
+    assert live.focus_at_startup is False

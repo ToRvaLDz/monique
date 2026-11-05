@@ -63,7 +63,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         super().__init__()
         self._monitor: MonitorConfig | None = None
         self._building = False
-        self._backend: str = "hyprland"  # "hyprland", "sway", or "niri"
+        self._backend: str = "hyprland"  # "hyprland", "sway", "niri" or "umbriel"
         self._hyprland_icc: bool = False
         self._hdr_dependent_rows: list[Gtk.Widget] = []
 
@@ -93,7 +93,7 @@ class PropertiesPanel(Adw.PreferencesPage):
 
         self._sw_default = Adw.SwitchRow(
             title="Default Monitor",
-            subtitle="Focused at startup (Niri and Hyprland only)",
+            subtitle="Focused at startup (Niri, Hyprland and Umbriel only)",
             icon_name="starred-symbolic",
         )
         self._sw_default.connect("notify::active", self._on_changed)
@@ -343,33 +343,38 @@ class PropertiesPanel(Adw.PreferencesPage):
     ) -> None:
         """Disable controls not supported by the active compositor.
 
-        backend should be "hyprland", "sway", or "niri".
+        backend should be "hyprland", "sway", "niri" or "umbriel".
         """
         self._backend = backend
         self._hyprland_icc = hyprland_icc
         is_hyprland = backend == "hyprland"
+        is_umbriel = backend == "umbriel"
 
-        # Hyprland-only Advanced controls
+        # Hyprland-only Advanced controls (Umbriel has no mirroring)
         self._combo_mirror.set_sensitive(is_hyprland)
-        self._combo_bitdepth.set_sensitive(is_hyprland)
-        self._combo_cm.set_sensitive(is_hyprland)
+        self._combo_bitdepth.set_sensitive(is_hyprland or is_umbriel)
+        self._combo_cm.set_sensitive(is_hyprland or is_umbriel)
+        # Umbriel ha solo hdr = "on": degli altri valori Monique non scrive nulla
+        self._combo_cm.set_subtitle(
+            "Only hdr and hdredid are applied (hdr = on)" if is_umbriel else ""
+        )
         self._entry_icc.set_sensitive(is_hyprland and hyprland_icc)
         self._spin_sdr_bright.set_sensitive(is_hyprland)
         self._spin_sdr_sat.set_sensitive(is_hyprland)
 
         # Default monitor: Sway has no equivalent option
-        self._sw_default.set_sensitive(backend in ("hyprland", "niri"))
+        self._sw_default.set_sensitive(backend in ("hyprland", "niri", "umbriel"))
 
         # Reserved Area: Hyprland only
         self._grp_reserved.set_sensitive(is_hyprland)
 
         # VRR: Sway/Niri only support Off/On (no "Fullscreen only")
-        if is_hyprland:
+        if is_hyprland or is_umbriel:
             self._combo_vrr.set_model(Gtk.StringList.new(["Off", "On", "Fullscreen only"]))
         else:
             self._combo_vrr.set_model(Gtk.StringList.new(["Off", "On"]))
 
-        # Position mode: Sway/Niri only support explicit
+        # Position mode: Sway/Niri/Umbriel only support explicit
         if is_hyprland:
             pos_modes = Gtk.StringList.new([m.value for m in PositionMode])
         else:
@@ -377,7 +382,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._combo_pos_mode.set_model(pos_modes)
         self._combo_pos_mode.set_sensitive(is_hyprland)
 
-        # Scale mode: Sway/Niri only support explicit
+        # Scale mode: Sway/Niri/Umbriel only support explicit
         if is_hyprland:
             scale_modes = Gtk.StringList.new([m.value for m in ScaleMode])
         else:
@@ -385,7 +390,7 @@ class PropertiesPanel(Adw.PreferencesPage):
         self._combo_scale_mode.set_model(scale_modes)
         self._combo_scale_mode.set_sensitive(is_hyprland)
 
-        # Resolution mode: Sway/Niri only support explicit and preferred
+        # Resolution mode: Sway/Niri/Umbriel only support explicit and preferred
         if is_hyprland:
             res_modes = Gtk.StringList.new([m.value for m in ResolutionMode])
         else:
