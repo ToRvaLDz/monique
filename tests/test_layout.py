@@ -108,7 +108,7 @@ def test_fractional_edge_tolerance():
     a = mon("A", 0, 0, 1920, 1080, scale=1.5)
     b = mon("B", 1281, 0)  # arrotondato di 1 px
     resize([a, b], 0, scale=1.0)
-    assert b.x == 1921
+    assert b.x == 1920  # riallineato al bordo di arrivo
 
 
 def test_same_size_noop():
@@ -116,3 +116,91 @@ def test_same_size_noop():
     b = mon("B", 1920, 0)
     follow_resize([a, b], 0, a.logical_width, a.logical_height)
     assert b.x == 1920
+
+
+def _steps(step, n):
+    up = [round(1.0 + step * i, 2) for i in range(1, n + 1)]
+    return up + up[::-1][1:] + [1.0]
+
+
+def test_small_steps_keep_contact_005():
+    a = mon("A", 0, 0, 3840, 2160)
+    b = mon("B", 3840, 0, 2560, 1440)
+    for s in _steps(0.05, 20):
+        resize([a, b], 0, scale=s)
+        assert abs(b.x - a.logical_width) <= 1, s
+    assert b.x == 3840
+
+
+def test_small_steps_keep_contact_001():
+    a = mon("A", 0, 0, 3840, 2160)
+    b = mon("B", 3840, 0, 2560, 1440)
+    for s in _steps(0.01, 100):
+        resize([a, b], 0, scale=s)
+        assert abs(b.x - a.logical_width) <= 1, s
+    assert b.x == 3840
+
+
+def test_small_steps_end_matches_single_jump():
+    a = mon("A", 0, 0, 3840, 2160)
+    b = mon("B", 3840, 0, 2560, 1440)
+    for s in [round(1.0 + 0.05 * i, 2) for i in range(1, 21)]:
+        resize([a, b], 0, scale=s)
+    a2 = mon("A", 0, 0, 3840, 2160)
+    b2 = mon("B", 3840, 0, 2560, 1440)
+    resize([a2, b2], 0, scale=2.0)
+    assert b.x == b2.x
+
+
+def test_small_steps_chain_of_three():
+    a = mon("A", 0, 0, 3840, 2160)
+    b = mon("B", 3840, 0, 2560, 1440)
+    c = mon("C", 6400, 0, 1920, 1080)
+    for s in _steps(0.05, 20):
+        resize([a, b, c], 0, scale=s)
+        assert abs(b.x - a.logical_width) <= 1, s
+        assert abs(c.x - (b.x + 2560)) <= 1, s
+    assert (b.x, c.x) == (3840, 6400)
+
+
+def test_small_steps_vertical():
+    a = mon("A", 0, 0, 3840, 2160)
+    b = mon("B", 0, 2160, 1920, 1080)
+    for s in _steps(0.05, 20):
+        resize([a, b], 0, scale=s)
+        assert abs(b.y - a.logical_height) <= 1, s
+    assert b.y == 2160
+
+
+def test_two_first_level_neighbours_stay_in_contact():
+    a = mon("A", 0, 0, 3840, 2160)
+    b = mon("B", 3840, 0, 2560, 1440)
+    c = mon("C", 3840, 1000, 1920, 720)
+    for s in _steps(0.05, 20):
+        resize([a, b, c], 0, scale=s)
+        assert abs(b.x - a.logical_width) <= 1, s
+        assert abs(c.x - a.logical_width) <= 1, s
+
+
+def test_shrink_cross_axis_uses_old_extent():
+    a = mon("A", 0, 0, 3840, 2160)
+    b = mon("B", 3840, 1800, 2560, 1440)
+    resize([a, b], 0, scale=2.0)
+    assert b.x == 1920
+
+
+def test_grow_cross_axis_uses_old_extent():
+    a = mon("A", 0, 0)
+    b = mon("B", 1920, 1200)
+    resize([a, b], 0, scale=0.5)
+    assert b.x == 1920
+
+
+def test_rotation_cross_axis_uses_old_extent():
+    a = mon("A", 0, 0, 1920, 1080)
+    # tocca a destra solo nella vecchia altezza (1080), non nella nuova (1920)
+    right = mon("R", 1920, 0)
+    far = mon("F", 1920, 1500)
+    resize([a, right, far], 0, transform=Transform.ROTATE_90)
+    assert right.x == 1080
+    assert far.x == 1920
