@@ -231,6 +231,16 @@ def test_umbriel_preferred_drops_ambiguous_twin_descriptions():
     assert found == {"DP-1": "2560x1440@59.951", "DP-2": "2560x1440@59.951"}
 
 
+@pytest.mark.parametrize("bare_first", [True, False])
+def test_umbriel_preferred_twin_without_a_mode_does_not_leak(bare_first):
+    bare = _preferred_output(name="DP-2", modes=[])
+    twins = [bare, _preferred_output()] if bare_first else [_preferred_output(), bare]
+
+    found = umbriel_preferred(twins)
+
+    assert found == {"DP-1": "2560x1440@59.951"}
+
+
 def test_non_explicit_resolution_gets_the_live_preferred_mode():
     preferred = umbriel_preferred([_preferred_output()])
 

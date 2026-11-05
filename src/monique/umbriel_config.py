@@ -97,7 +97,12 @@ def umbriel_preferred(outputs: list[dict]) -> dict[str, str]:
     condivisa da più output (gemelli) è ambigua e resta fuori: vale il connettore.
     """
     found: dict[str, str] = {}
-    seen: set[str] = set()
+    # Anche un output senza modo preferito conta: un gemello non eredita il suo
+    counts: dict[str, int] = {}
+    for out in outputs:
+        desc = _identity(out)
+        if desc:
+            counts[desc] = counts.get(desc, 0) + 1
     for out in outputs:
         mode = next((m for m in out.get("modes") or [] if m.get("preferred")), None)
         text = _mode_text(mode) if mode else None
@@ -106,11 +111,8 @@ def umbriel_preferred(outputs: list[dict]) -> dict[str, str]:
         if out.get("name"):
             found[out["name"]] = text
         desc = _identity(out)
-        if desc and desc not in seen:
+        if desc and counts[desc] == 1:
             found[desc] = text
-        elif desc:
-            found.pop(desc, None)
-        seen.add(desc)
     return found
 
 
