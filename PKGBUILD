@@ -2,7 +2,7 @@
 pkgname=monique
 pkgver=0.8.3
 pkgrel=1
-pkgdesc='MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland, Sway and Niri'
+pkgdesc='MONitor Integrated QUick Editor - graphical monitor configurator for Hyprland, Sway, Niri and Umbriel'
 arch=('any')
 license=('GPL-3.0-or-later')
 depends=(
@@ -16,6 +16,7 @@ optdepends=(
     'hyprland: Hyprland compositor support'
     'sway: Sway compositor support'
     'niri: Niri compositor support'
+    'umbriel: Umbriel compositor support'
     'sddm: login screen layout sync via Xsetup'
     'polkit: passwordless SDDM Xsetup writes'
     'python-pyudev: hardware hotplug detection for Niri'

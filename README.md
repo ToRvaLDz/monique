@@ -7,7 +7,7 @@
 <p align="center">
   <b>MON</b>itor <b>I</b>ntegrated <b>QU</b>ick <b>E</b>ditor
   <br>
-  Graphical monitor configurator for <b>Hyprland</b>, <b>Sway</b> and <b>Niri</b>
+  Graphical monitor configurator for <b>Hyprland</b>, <b>Sway</b>, <b>Niri</b> and <b>Umbriel</b>
 </p>
 
 <p align="center">
@@ -26,6 +26,7 @@
   <img alt="Hyprland" src="https://img.shields.io/badge/Hyprland-%2358e1ff?logo=hyprland&logoColor=white">
   <img alt="Sway" src="https://img.shields.io/badge/Sway-%2368751a?logo=sway&logoColor=white">
   <img alt="Niri" src="https://img.shields.io/badge/Niri-%23c77dff">
+  <img alt="Umbriel" src="https://img.shields.io/badge/Umbriel-%23888888">
   <img alt="Wayland" src="https://img.shields.io/badge/Wayland-%23ffbc00?logo=wayland&logoColor=black">
 </p>
 
@@ -67,8 +68,8 @@
 ## Features
 
 - **Drag-and-drop layout** — arrange monitors visually on an interactive canvas
-- **Multi-backend** — auto-detects Hyprland, Sway, or Niri from the environment
-- **Cross-write** — save a profile in any compositor and automatically generate config files for the others (e.g. configure in Hyprland → get Sway and Niri configs for free)
+- **Multi-backend** - auto-detects Hyprland, Sway, Niri, or Umbriel from the environment
+- **Cross-write** - save a profile in any compositor and automatically generate config files for the others (e.g. configure in Hyprland → get Sway, Niri and Umbriel configs for free)
 - **Profile system** — save, load, and switch between monitor configurations
 - **Hotplug daemon** (`moniqued`) — automatically applies the best matching profile when monitors are connected or disconnected
 - **Display manager integration** — syncs your layout to the login screen for SDDM (xrandr) and greetd (sway), with polkit rule for passwordless writes
@@ -217,7 +218,7 @@ Or enable the systemd user service:
 systemctl --user enable --now moniqued
 ```
 
-The daemon auto-detects the active compositor and listens for monitor hotplug events. When a monitor is connected or disconnected, it waits 500ms (debounce) then applies the best matching profile. On Niri, the daemon uses udev DRM events (via `pyudev`) for reliable hardware hotplug detection. Orphaned workspaces are automatically migrated to the primary monitor on Hyprland/Sway (configurable via **Preferences > Migrate workspaces**).
+The daemon auto-detects the active compositor and listens for monitor hotplug events. When a monitor is connected or disconnected, it waits 500ms (debounce) then applies the best matching profile. On Niri, the daemon uses udev DRM events (via `pyudev`) for reliable hardware hotplug detection. Orphaned workspaces are automatically migrated to the primary monitor on Hyprland/Sway (Niri and Umbriel move them natively) (configurable via **Preferences > Migrate workspaces**).
 
 A profile you apply explicitly (from the GUI or with `--switch-profile`) is remembered for the set of monitors connected at that moment: whenever exactly those monitors are connected, the daemon re-applies your choice instead of picking the best match on its own. This keeps a monitor you disabled switched off even when it drops into standby and comes back as connected. Connecting a different set of monitors falls back to best-match; applying an unsaved layout or running `--detect-profile` clears the remembered choice.
 
@@ -236,6 +237,7 @@ The daemon also monitors the laptop lid state via UPower D-Bus: closing the lid 
 | Hyprland | `$HYPRLAND_INSTANCE_SIGNATURE` | `monitoradded` / `monitorremoved` via socket2 |
 | Sway | `$SWAYSOCK` | `output` events via i3-ipc subscribe |
 | Niri | `$NIRI_SOCKET` | udev DRM subsystem (with `pyudev`), IPC fallback |
+| Umbriel | `$UMBRIEL_SOCKET` (or a live `$XDG_RUNTIME_DIR/umbriel-*.sock`) | `outputs` subscription: a monitor added or removed |
 | Neither | Warning, retry every 5s | — |
 
 ## Display manager integration
@@ -260,7 +262,9 @@ Toggle from the GUI: **Menu > Preferences > Update SDDM Xsetup** or **Update gre
 
 Available on **Hyprland 0.50+**, where Monique writes the `monitorv2 { … }` block syntax
 (auto-detected from the running compositor). Sway and Niri expose no equivalent options,
-so these controls stay disabled there.
+so these controls stay disabled there. On Umbriel, only `hdr` and `hdredid` (written as
+`hdr = "on"`) and the 8/10 bit depth (`bit_depth`) are applied; the other presets, ICC profiles
+and brightness/saturation have no Umbriel equivalent.
 
 Select a monitor and scroll the properties sidebar. **Advanced** group:
 
@@ -314,6 +318,7 @@ Monitor config files are written to the compositor's config directory:
 - **Hyprland:** `~/.config/hypr/monitors.conf` and/or `~/.config/hypr/monitors.lua`
 - **Sway:** `~/.config/sway/monitors.conf`
 - **Niri:** `~/.config/niri/monitors.kdl`
+- **Umbriel:** `~/.config/umbriel/monitors.toml` (see [Umbriel](#umbriel))
 
 For Hyprland's legacy hyprlang config, add `source = ~/.config/hypr/monitors.conf` to `hyprland.conf`.
 For Hyprland 0.55+ Lua config, add `require("monitors")` to `hyprland.lua`.
@@ -329,10 +334,40 @@ To use a custom output directory, set it in **Preferences → Config Output** or
 To change the generated file's base name (default `monitors`), set **Monitor config filename** in
 **Preferences → Config Output** (stored as `monitor_config_name` in `settings.json`). The value is a
 base name without extension, relative to the compositor's config directory, and may include
-subdirectories (e.g. `cfg/display` → `cfg/display.kdl` for Niri, `cfg/display.conf` for Sway, and
+subdirectories (e.g. `cfg/display` → `cfg/display.kdl` for Niri, `cfg/display.toml` for Umbriel, `cfg/display.conf` for Sway, and
 `cfg/display.conf`/`cfg/display.lua` for Hyprland). Absolute paths and `..` segments are rejected.
 For Niri, the `include` line in `config.kdl` is kept in sync with the configured name; if you change
 the name later, update your Hyprland `source`/`require` lines to match.
+
+### Umbriel
+
+Umbriel reads `~/.config/umbriel/config.toml` and never creates it. Monique writes the outputs to
+`monitors.toml` and keeps this block in `config.toml` (an optional include, so deleting
+`monitors.toml` never breaks the session; Umbriel reloads on save):
+
+```toml
+[include.optional]
+# Monique monitor configuration: monitors.toml
+files = ["monitors.toml"]
+```
+
+- **No `config.toml` yet:** Monique copies the packaged one (first found in `XDG_CONFIG_DIRS`,
+  `XDG_DATA_DIRS`, `/usr/share`, `/usr/local/share`) and adds the include. A stub would shadow the
+  packaged config and lose every keybind. The copy no longer follows package updates, which is how
+  the Umbriel docs ask you to customise it. With `--config-dir` Monique does not create it: add the
+  include yourself.
+- **First run:** the including file wins over included ones, so the `[output.*]` keys Monique
+  manages (`enabled`, `mode`, `position`, `scale`, `transform`, `vrr`, `hdr`, `bit_depth`,
+  `focus_at_startup`) are removed from your `config.toml`; anything else (`workspaces`, `tearing`,
+  `screen_effect`, ...) stays. Later runs never touch your output tables.
+- **Edits are verified:** the edited file is parsed and compared with what it must contain. If the
+  layout cannot be edited safely (dotted `output.X.key` keys, an inline `include = {...}` table or a
+  multi-line `files` list), nothing is written and the apply fails with a message; the GUI restores
+  its backups. Add the include of your monitors file by hand in that case.
+- Outputs are matched by `"<make> <model> <serial>"` (or by connector with **Use port names**).
+- **Limits:** no mirroring, no workspace rules, no ICC profiles, no SDR brightness/saturation or HDR
+  EDID overrides, and VRR/HDR are only restored in the GUI from `monitors.toml`, because the IPC
+  reports live state only.
 
 ### kanshi export
 
@@ -375,6 +410,8 @@ src/monique/
 ├── hyprland.py          # Hyprland IPC client
 ├── sway.py              # Sway IPC client (binary i3-ipc)
 ├── niri.py              # Niri IPC client (JSON socket)
+├── umbriel.py           # Umbriel IPC client (JSON lines over a Unix socket)
+├── umbriel_config.py    # Umbriel monitors.toml generator and config.toml include
 ├── daemon.py            # Hotplug daemon (moniqued)
 ├── kanshi_config.py     # kanshi config generator
 ├── profile_manager.py   # Profile save/load/match

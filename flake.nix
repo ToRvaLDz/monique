@@ -1,5 +1,5 @@
 {
-  description = "MONitor Integrated QUick Editor — graphical monitor configurator for Hyprland, Sway and Niri";
+  description = "MONitor Integrated QUick Editor - graphical monitor configurator for Hyprland, Sway, Niri and Umbriel";
 
   inputs.nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
 

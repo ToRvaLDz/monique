@@ -693,7 +693,7 @@ class MainWindow(Adw.ApplicationWindow):
             application_icon="com.github.monique",
             version="0.8.3",
             developer_name="Monique contributors",
-            comments="MONitor Integrated QUick Editor for Hyprland and Sway",
+            comments="MONitor Integrated QUick Editor for Hyprland, Sway, Niri and Umbriel",
             license_type=Gtk.License.GPL_3_0,
         )
         about.present(self)

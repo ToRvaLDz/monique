@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=Monique
-Comment=MONitor Integrated QUick Editor for Hyprland, Sway and Niri
+Comment=MONitor Integrated QUick Editor for Hyprland, Sway, Niri and Umbriel
 Exec=monique
 Icon=com.github.monique
 Terminal=false
