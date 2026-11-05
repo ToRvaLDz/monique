@@ -12,6 +12,8 @@ import asyncio
 from monique.daemon import MonitorDaemon
 from monique.models import MonitorConfig, Profile
 from monique.profile_manager import ProfileManager
+from monique.umbriel import UmbrielIPC
+from monique.umbriel_config import UmbrielConfigError
 from monique.utils import get_pinned_profile, save_app_settings, save_pinned_profile
 
 
@@ -430,3 +432,59 @@ def test_lid_change_applies():
 
     assert daemon._lid_closed is True
     assert scheduled == [True]
+
+
+class _FakeUmbriel(UmbrielIPC):
+    """Umbriel client with the socket replaced by canned answers."""
+
+    def __init__(self, monitors: list[MonitorConfig], error: Exception | None = None) -> None:
+        super().__init__()
+        self.monitors = monitors
+        self.error = error
+        self.applied: list[str] = []
+
+    def get_monitors(self) -> list[MonitorConfig]:
+        return self.monitors
+
+    def get_workspaces(self) -> list[dict]:
+        return [{"name": "1", "output": "DP-9"}]
+
+    def apply_profile(self, profile: Profile, **kwargs) -> None:
+        if self.error:
+            raise self.error
+        self.applied.append(profile.name)
+
+
+def _migrations(monkeypatch) -> list[str]:
+    calls: list[str] = []
+    monkeypatch.setattr(
+        MonitorDaemon, "_migrate_orphaned_workspaces",
+        lambda self, ipc, profile, snapshot: calls.append(type(ipc).__name__),
+    )
+    return calls
+
+
+def test_umbriel_apply_skips_workspace_migration(monkeypatch) -> None:
+    """Umbriel moves the workspaces of a vanished output itself."""
+    _save_profiles()
+    migrations = _migrations(monkeypatch)
+    umbriel, other = _FakeUmbriel(_FOUR), _FakeIPC(_FOUR)
+
+    async def scenario() -> None:
+        await MonitorDaemon()._apply_best_profile(umbriel, force=True)
+        await MonitorDaemon()._apply_best_profile(other, force=True)
+
+    asyncio.run(scenario())
+
+    assert umbriel.applied == ["Full"]
+    assert migrations == ["_FakeIPC"]
+
+
+def test_umbriel_config_error_is_logged_not_raised() -> None:
+    """An include that cannot be ensured must not kill the daemon loop."""
+    _save_profiles()
+    ipc = _FakeUmbriel(_FOUR, error=UmbrielConfigError("cannot edit config.toml"))
+
+    asyncio.run(MonitorDaemon()._apply_best_profile(ipc, force=True))
+
+    assert ipc.applied == []

@@ -11,8 +11,9 @@ import time
 from .hyprland import HyprlandIPC
 from .niri import NiriIPC
 from .sway import SwayIPC
+from .umbriel import UmbrielIPC
 from .dbus_events import SystemBusWatcher
-from .detect import detect_backend
+from .detect import IPCBackend, detect_backend
 from .models import Profile, apply_clamshell, undo_clamshell
 from .profile_manager import ProfileManager
 from .utils import get_pinned_profile, load_app_settings, save_active_profile
@@ -28,6 +29,9 @@ logging.basicConfig(
     format="%(asctime)s [moniqued] %(levelname)s %(message)s",
 )
 log = logging.getLogger(__name__)
+
+# Compositori che spostano da soli i workspace di un monitor scollegato
+NATIVE_WORKSPACE_MIGRATION = (NiriIPC, UmbrielIPC)
 
 DEBOUNCE_MS = 500
 UDEV_SETTLE_S = 5  # Ignore udev events shortly after applying (config reload triggers DRM events)
@@ -48,7 +52,7 @@ class MonitorDaemon:
         self._last_applied_profile: str | None = None
         self._last_applied_fingerprint: set[str] = set()
         self._using_udev: bool = False
-        self._ipc: HyprlandIPC | NiriIPC | SwayIPC | None = None
+        self._ipc: IPCBackend | None = None
         self._lid_closed: bool | None = None  # None = no lid / not monitored
         self._awaiting_stable: bool = False
         self._asyncio_loop: asyncio.AbstractEventLoop | None = None
@@ -70,6 +74,8 @@ class MonitorDaemon:
                     backend_name = "Hyprland"
                 elif isinstance(ipc, NiriIPC):
                     backend_name = "Niri"
+                elif isinstance(ipc, UmbrielIPC):
+                    backend_name = "Umbriel"
                 else:
                     backend_name = "Sway"
                 log.info("Detected %s compositor", backend_name)
@@ -85,7 +91,7 @@ class MonitorDaemon:
                     self._debounce_handle.cancel()
                     self._debounce_handle = None
 
-    async def _listen(self, ipc: HyprlandIPC | NiriIPC | SwayIPC) -> None:
+    async def _listen(self, ipc: IPCBackend) -> None:
         self._ipc = ipc
         if isinstance(ipc, NiriIPC) and HAS_PYUDEV:
             self._using_udev = True
@@ -124,7 +130,7 @@ class MonitorDaemon:
         finally:
             loop.remove_reader(monitor.fileno())
 
-    def _schedule_apply(self, ipc: HyprlandIPC | NiriIPC | SwayIPC, *, force: bool = False) -> None:
+    def _schedule_apply(self, ipc: IPCBackend, *, force: bool = False) -> None:
         """Debounce monitor events before applying."""
         if self._awaiting_stable:
             # Resume fires a burst of DRM events; applying on one of them would
@@ -169,7 +175,7 @@ class MonitorDaemon:
             lambda f=force: asyncio.ensure_future(self._apply_best_profile(ipc, force=f)),
         )
 
-    async def _apply_best_profile(self, ipc: HyprlandIPC | NiriIPC | SwayIPC, *, force: bool = False) -> None:
+    async def _apply_best_profile(self, ipc: IPCBackend, *, force: bool = False) -> None:
         """Query current monitors, find best profile, and apply it."""
         try:
             monitors = ipc.get_monitors()
@@ -271,8 +277,8 @@ class MonitorDaemon:
                 self._last_applied_fingerprint = set(fingerprint)
                 save_active_profile(profile.name)
 
-                # Migrate orphaned workspaces (Niri handles this natively)
-                if not isinstance(ipc, NiriIPC) and settings.get("migrate_workspaces", True):
+                # Migrate orphaned workspaces (Niri and Umbriel handle this natively)
+                if not isinstance(ipc, NATIVE_WORKSPACE_MIGRATION) and settings.get("migrate_workspaces", True):
                     self._migrate_orphaned_workspaces(ipc, profile, ws_snapshot)
             else:
                 # No matching profile found.
@@ -374,7 +380,7 @@ class MonitorDaemon:
             self._debounce_handle = None
         asyncio.ensure_future(self._apply_when_stable(self._ipc))
 
-    async def _apply_when_stable(self, ipc: HyprlandIPC | NiriIPC | SwayIPC) -> None:
+    async def _apply_when_stable(self, ipc: IPCBackend) -> None:
         """Wait for the monitor list to settle, then apply the matching profile."""
         if self._awaiting_stable:
             return
@@ -387,7 +393,7 @@ class MonitorDaemon:
 
     async def _wait_for_stable(
         self,
-        ipc: HyprlandIPC | NiriIPC | SwayIPC,
+        ipc: IPCBackend,
         *,
         interval: float = RESUME_POLL_S,
         timeout: float = RESUME_TIMEOUT_S,
