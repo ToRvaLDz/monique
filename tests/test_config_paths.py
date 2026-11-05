@@ -48,7 +48,20 @@ def _set_installed(monkeypatch, primary, *, hyprland, sway, niri, umbriel=False)
 
 
 def _neutralise_side_effects(monkeypatch, primary):
-    """Stub out the socket reload and the privileged pkexec writes."""
+    """Stub out the socket reload and the privileged pkexec writes.
+
+    The tests run inside a real session: no environment variable may lead to
+    a live compositor, and the JSON socket clients cannot send anything.
+    """
+    for var in ("UMBRIEL_SOCKET", "NIRI_SOCKET", "SWAYSOCK",
+                "HYPRLAND_INSTANCE_SIGNATURE", "WAYLAND_DISPLAY"):
+        monkeypatch.delenv(var, raising=False)
+
+    def no_socket(self, *args, **kwargs):
+        raise OSError("no compositor in tests")
+
+    for cls in (UmbrielIPC, NiriIPC):
+        monkeypatch.setattr(cls, "_request", no_socket)
     for name in ("is_sddm_running", "is_greetd_running"):
         monkeypatch.setattr(f"monique.{primary}.{name}", lambda: False)
     monkeypatch.setattr(IPC_FOR[primary], "reload", lambda self: None)
