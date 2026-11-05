@@ -1,0 +1,104 @@
+[
+ {
+  "active_workspace": "HEADLESS-1:1",
+  "adaptive_sync": null,
+  "config_name": null,
+  "description": "Headless output 1",
+  "direct_scanout": {
+   "active": false,
+   "commit_seq": 4,
+   "commits": 4,
+   "reason": "composited",
+   "scanout_commits": 0,
+   "window": null
+  },
+  "enabled": true,
+  "focused": true,
+  "hdr_active": false,
+  "logical_size": {
+   "height": 720,
+   "width": 1280
+  },
+  "make": "",
+  "model": "",
+  "modes": [
+   {
+    "current": true,
+    "height": 720,
+    "preferred": false,
+    "refresh_mhz": 0,
+    "width": 1280
+   }
+  ],
+  "name": "HEADLESS-1",
+  "physical_size": {
+   "height_mm": 0,
+   "width_mm": 0
+  },
+  "position": {
+   "x": 0,
+   "y": 0
+  },
+  "powered": true,
+  "scale": 1.0,
+  "serial": "",
+  "transform": "normal",
+  "usable_area": {
+   "height": 720,
+   "width": 1280,
+   "x": 0,
+   "y": 0
+  }
+ },
+ {
+  "active_workspace": "V2:1",
+  "adaptive_sync": null,
+  "config_name": null,
+  "description": "Headless output 2",
+  "direct_scanout": {
+   "active": false,
+   "commit_seq": 3,
+   "commits": 2,
+   "reason": "composited",
+   "scanout_commits": 0,
+   "window": null
+  },
+  "enabled": true,
+  "focused": false,
+  "hdr_active": false,
+  "logical_size": {
+   "height": 600,
+   "width": 800
+  },
+  "make": "",
+  "model": "",
+  "modes": [
+   {
+    "current": true,
+    "height": 600,
+    "preferred": false,
+    "refresh_mhz": 30000,
+    "width": 800
+   }
+  ],
+  "name": "V2",
+  "physical_size": {
+   "height_mm": 0,
+   "width_mm": 0
+  },
+  "position": {
+   "x": 1280,
+   "y": 0
+  },
+  "powered": true,
+  "scale": 1.0,
+  "serial": "",
+  "transform": "normal",
+  "usable_area": {
+   "height": 600,
+   "width": 800,
+   "x": 1280,
+   "y": 0
+  }
+ }
+]

@@ -21,12 +21,14 @@ from .utils import (
     is_sway_installed,
     niri_config_dir,
     sway_config_dir,
+    umbriel_config_dir,
 )
 
 
 HYPRLAND = "hyprland"
 SWAY = "sway"
 NIRI = "niri"
+UMBRIEL = "umbriel"
 
 
 def sway_monitors_path() -> Path:
@@ -37,6 +39,11 @@ def sway_monitors_path() -> Path:
 def niri_monitors_path() -> Path:
     """Return the Niri monitor config file."""
     return niri_config_dir() / f"{get_monitor_config_name()}.kdl"
+
+
+def umbriel_monitors_path() -> Path:
+    """Return the Umbriel monitor config file."""
+    return umbriel_config_dir() / f"{get_monitor_config_name()}.toml"
 
 
 def compositor_config_paths(

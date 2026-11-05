@@ -22,7 +22,7 @@ DEFAULT_HYPR_FORMAT = HYPR_FORMAT_BOTH
 
 # Base name (senza estensione) dei file di config monitor generati.  L'estensione
 # la aggiunge ogni compositore: ``.kdl`` (Niri), ``.conf`` (Sway/Hyprland legacy),
-# ``.lua`` (Hyprland >= 0.55), ``.kanshi`` (kanshi).  Può includere sottocartelle relative alla config
+# ``.lua`` (Hyprland >= 0.55), ``.kanshi`` (kanshi), ``.toml`` (Umbriel).  Può includere sottocartelle relative alla config
 # dir del compositore (es. ``cfg/display``).  Il default riproduce i nomi storici.
 DEFAULT_MONITOR_CONFIG_NAME = "monitors"
 
@@ -63,6 +63,11 @@ def is_niri_installed() -> bool:
     return shutil.which("niri") is not None
 
 
+def is_umbriel_installed() -> bool:
+    """Return True if Umbriel is available on the system."""
+    return shutil.which("umbriel") is not None
+
+
 def _config_dir_override() -> Path | None:
     """Restituisce il percorso personalizzato per i file monitor, se configurato.
 
@@ -101,6 +106,15 @@ def niri_config_dir() -> Path:
         return override
     base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
     return base / "niri"
+
+
+def umbriel_config_dir() -> Path:
+    """Return the Umbriel config directory."""
+    override = _config_dir_override()
+    if override:
+        return override
+    base = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+    return base / "umbriel"
 
 
 def kanshi_config_dir() -> Path:
