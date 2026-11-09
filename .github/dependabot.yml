@@ -2,6 +2,8 @@ version: 2
 updates:
   - package-ecosystem: "pip"
     directory: "/"
+    # Solo quando il range esclude la nuova versione: niente bump dei minimi
+    versioning-strategy: increase-if-necessary
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
