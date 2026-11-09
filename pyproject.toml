@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-udev = ["pyudev>=0.24"]
+udev = ["pyudev>=0.24.5"]
 test = ["pytest>=7.0"]
 
 [project.scripts]
