@@ -10,7 +10,7 @@ readme = "README.md"
 license = "GPL-3.0-or-later"
 requires-python = ">=3.11"
 dependencies = [
-    "PyGObject>=3.46",
+    "PyGObject>=3.58.1",
 ]
 
 [project.optional-dependencies]
