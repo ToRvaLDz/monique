@@ -15,7 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 udev = ["pyudev>=0.24"]
-test = ["pytest>=7.0"]
+test = ["pytest>=9.2.0"]
 
 [project.scripts]
 monique = "monique.app:main"
