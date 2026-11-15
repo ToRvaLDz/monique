@@ -413,9 +413,9 @@ class PropertiesPanel(Adw.PreferencesPage):
         )
 
     def set_mirror_monitors(self, names: list[str]) -> None:
-        """Update the mirror dropdown with available monitor names."""
+        """Update the mirror dropdown with the monitors the selected one can mirror."""
         self._building = True
-        options = ["None"] + [n for n in names if n != (self._monitor.name if self._monitor else "")]
+        options = ["None"] + names
         self._combo_mirror.set_model(Gtk.StringList.new(options))
         self._building = False
 
