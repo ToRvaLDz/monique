@@ -904,7 +904,7 @@ class MainWindow(Adw.ApplicationWindow):
         idx = self._canvas.selected_index
         if 0 <= idx < len(self._monitors):
             m = self._monitors[idx]
-            names = [mon.name for mon in self._monitors]
+            names = [mon.name for mon in self._monitors if mon is not m]
             self._props.set_mirror_monitors(names)
             self._props.update_from_monitor(m)
             # Lock enabled switch for internal monitors when clamshell is active
